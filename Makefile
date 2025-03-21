@@ -1,16 +1,19 @@
-CC = gcc
-
-CFLAGS = -O0 -g
+CC=cc
+CFLAGS=-O0 -g
 
 ALL = bf-pbwt
 
-%.0: %.c %.h
+%.o: %.c %.h
 	${CC} -c ${CFLAGS} $< -o $@
 
 all: ${ALL}
 
 bf-pbwt: bf-pbwt.o
 	${CC} $^ -o $@
+
+2bfpbwt: 2bfpbwt.o
+	${CC} $^ -o $@
+	
 
 clean:
 	-/bin/rm -f *.o
