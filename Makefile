@@ -1,7 +1,10 @@
-CC=cc
-CFLAGS=-O0 -g
+CC?=cc
+CFLAGS?=-O3
 
-ALL = bf-pbwt
+VPATH=lib/quadsort
+ALL=bf-pbwt 2bfpbwt
+
+debug: CFLAGS=-O0 -g
 
 %.o: %.c %.h
 	${CC} -c ${CFLAGS} $< -o $@
@@ -12,8 +15,10 @@ bf-pbwt: bf-pbwt.o
 	${CC} $^ -o $@
 
 2bfpbwt: 2bfpbwt.o
-	${CC} $^ -o $@
+	${CC} $< -o $@
 	
+pgen: pgen.c
+	${CC} -O3 $^ -o $@
 
 clean:
 	-/bin/rm -f *.o

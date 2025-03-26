@@ -1,3 +1,11 @@
+# editors, os and stuff
 .vscode
-bf-pbwt.o
+.DS_Store
+
+# intermediates
+*.o
+
+# executables
 bf-pbwt
+2bfpbwt
+pgen
