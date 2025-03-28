@@ -182,6 +182,97 @@ static inline void _sort_window(size_t n, uint64_t *restrict c) {
   quadsort_prim(c, n, sizeof(long long) + 1);
 }
 
+/*
+ * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
+ * using externally allocated `aux[n]` auxiliary array.
+ * This version assumes the `s` array to be already initialized.
+ */
+void rrsortx(size_t n, uint64_t *c, uint64_t *s, uint64_t *aux) {
+  uint64_t *tmp;
+  size_t j;
+  uint64_t *pre = s;
+  uint64_t *post = aux;
+  uint8_t b;
+
+  for (size_t i = 0; i < 8; i++) {
+    size_t cnt[256] = {0};
+
+    // frequencies
+    for (j = 0; j < n; j++) {
+      /*cnt[mask2(c[j], i)]++;*/
+      b = (c[j] >> (8 * i)) & 0xFFULL;
+      cnt[b]++;
+    }
+    // prefix sum
+    for (size_t j = 1; j < 256; j++)
+      cnt[j] += cnt[j - 1];
+    // sorting
+    for (ssize_t j = n - 1; j >= 0; --j) {
+      /*cnt[mask2(c[pre[j]], i)]--;*/
+      /*post[cnt[mask2(c[pre[j]], i)]] = pre[j];*/
+
+      b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
+      cnt[b]--;
+      post[cnt[b]] = pre[j];
+    }
+    // swap s and aux
+    tmp = pre;
+    pre = post;
+    post = tmp;
+  }
+}
+
+/*
+ * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
+ * using externally allocated `aux[n]` auxiliary array.
+ * This version initialize the sorting from position 0,
+ * meaning that there will be a pass of setting the initial
+ * positions array to 1..n
+ */
+void rrsort0(size_t n, uint64_t *c, uint64_t *s, uint64_t *aux) {
+  uint64_t *tmp;
+  size_t j;
+  uint64_t *pre = s;
+  uint64_t *post = aux;
+  uint8_t b;
+
+  // this is needed if:
+  // 1. we want to sort numbers
+  // 2. this is the first iteration
+  //
+  // In normal BWT cases we assume to have
+  // `s` equal to the sorting of the previous "column"
+  for (size_t i = 0; i < n; ++i)
+    pre[i] = i;
+
+  for (size_t i = 0; i < 8; i++) {
+    size_t cnt[256] = {0};
+
+    // frequencies
+    for (j = 0; j < n; j++) {
+      /*cnt[mask2(c[j], i)]++;*/
+      b = (c[j] >> (8 * i)) & 0xFFULL;
+      cnt[b]++;
+    }
+    // prefix sum
+    for (size_t j = 1; j < 256; j++)
+      cnt[j] += cnt[j - 1];
+    // sorting
+    for (ssize_t j = n - 1; j >= 0; --j) {
+      /*cnt[mask2(c[pre[j]], i)]--;*/
+      /*post[cnt[mask2(c[pre[j]], i)]] = pre[j];*/
+
+      b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
+      cnt[b]--;
+      post[cnt[b]] = pre[j];
+    }
+    // swap s and aux
+    tmp = pre;
+    pre = post;
+    post = tmp;
+  }
+}
+
 static inline void _sort_window_brian(size_t n, uint64_t *restrict c) {
   size_t cnt[256] = {0};
   for (size_t i = 0; i < 8; i++) {
