@@ -80,13 +80,13 @@ static inline void fgetcoli(FILE *fd, size_t i, size_t n, uint8_t *restrict c,
   }                                                                            \
   static inline void fgetcoliw##W##r(FILE *fd, size_t i, size_t n,             \
                                      uint64_t *restrict c, size_t nc) {        \
-    int x;                                                                     \
+    uint64_t x;                                                                \
     fseek(fd, i *W, SEEK_SET);                                                 \
     for (size_t r = 0; r < n; r++) {                                           \
       c[r] = 0;                                                                \
       for (size_t s = 0; s < W; s++) {                                         \
         x = fgetc(fd) - 48;                                                    \
-        c[r] = (x << (s)) | c[r];                                              \
+        c[r] = (x << s) | c[r];                                                \
       }                                                                        \
       fseek(fd, nc - W + 1, SEEK_CUR);                                         \
     }                                                                          \
@@ -309,15 +309,15 @@ static inline void fgetcoliwgr(FILE *fd, size_t i, size_t n,
                                uint64_t *restrict c, size_t nc, uint8_t w) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
-  int x;
+  uint64_t x;
   fseek(fd, i * w, SEEK_SET);
   for (size_t r = 0; r < n; r++) {
     c[r] = 0;
     /*printf("r(");*/
     for (size_t s = 0; s < w; s++) {
       x = fgetc(fd) - 48;
-      /*printf("%d", x);*/
-      c[r] = (x << (s)) | c[r];
+      /*printf("%llu", x);*/
+      c[r] = (x << s) | c[r];
     }
     /*printf(")=%llu\n", c[r]);*/
     fseek(fd, nc - w + 1, SEEK_CUR);
@@ -352,7 +352,7 @@ pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
 
   size_t i;
   for (i = 0; i < n; i++) {
-    if (c[i] == 1) {
+    if (c[p->a[i]] == 1) {
       o[q++] = p->a[i];
     } else {
       z[r++] = p->a[i];
@@ -374,7 +374,90 @@ pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   return ret;
 }
 
+#define TEST_LOG
+
+#ifdef TEST_LOG
+#define DPRINT(format, args...)                                                \
+  do {                                                                         \
+    fprintf(stderr, format, ##args);                                           \
+  } while (0)
+
+#define DPARR(n, a, fmt)                                                       \
+  do {                                                                         \
+    for (int i = 0; i < (n); i++) {                                            \
+      fprintf(stderr, (fmt), (a)[i]);                                          \
+    }                                                                          \
+    puts("");                                                                  \
+  } while (0)
+#else
+#define DPRINT(args...)
+#define DPARR(args...)
+#endif
+
 int main(int argc, char *argv[]) {
+  if (argc < 2) {
+    fprintf(stderr, "Usage: %s FILE\n", argv[0]);
+    return EXIT_FAILURE;
+  }
+
+  FILE *fin = fopen(argv[1], "r");
+  if (!fin) {
+    perror("[main]");
+    return EXIT_FAILURE;
+  }
+
+  size_t nrow, ncol;
+  fgetrc(fin, &nrow, &ncol);
+
+  DPRINT("[%s] row: %5zu, col: %5zu\n", __func__, nrow, ncol);
+
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  // NOTE: right now I don't know what I need, so I'm keeping
+  // everything in memory, we'll see later
+  pbwtad **p = malloc(ncol * sizeof(pbwtad *));
+#define W 64
+  // first W=(64 for now), must be computed linearly
+  // TODO: ask if true
+
+  // WARN: do i need to do this for the first??
+  /*pbwtad *p0 = malloc(sizeof *p0);*/
+  /*p0->a = malloc(nrow * sizeof *(p0->a));*/
+  /*for (int j = 0; j < nrow; j++) {*/
+  /*  p0->a[j] = j;*/
+  /*}*/
+  fgetcoli(fin, 0, nrow, c0, ncol);
+  DPARR(nrow, c0, "%1d");
+  /*p[0] = cpbwt(nrow, c0, p0);*/
+  /*FREE(p0->a);*/
+  /*FREE(p0);*/
+  p[0] = malloc(sizeof(pbwtad *));
+  p[0]->a = malloc(nrow * sizeof *p[0]->a);
+  for (int j = 0; j < nrow; j++) {
+    p[0]->a[j] = j;
+  }
+  DPARR(nrow, p[0]->a, "%zu ");
+
+  for (int j = 1; j < W; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    DPARR(nrow, c0, "%1d");
+    p[j] = cpbwt(nrow, c0, p[j - 1]);
+    DPARR(nrow, p[j]->a, "%zu ");
+  }
+
+  // now let's start with the others.
+  // First I need to get the bitpack of the first (computed) W cols
+  uint64_t *pw0 = malloc(nrow * sizeof pw0);
+  fgetcoliw64r(fin, 0, nrow, pw0, ncol);
+  DPARR(nrow, pw0, "%llu ");
+  uint64_t *sorted = malloc(nrow * sizeof *sorted);
+  uint64_t *aux = malloc(nrow * sizeof *aux);
+  rrsort0(nrow, pw0, sorted, aux);
+  DPARR(nrow, aux, "%llu ");
+
+  return EXIT_SUCCESS;
+}
+
+int maintest(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "Usage: %s FILE\n", argv[0]);
     return EXIT_FAILURE;
