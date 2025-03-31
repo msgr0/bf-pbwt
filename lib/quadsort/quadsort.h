@@ -196,6 +196,17 @@ typedef int CMPFUNC (const void *a, const void *b);
 #endif
 #undef VAR
 #undef FUNC
+#define VAR unsigned long long
+#define FUNC(NAME) NAME##_uint64p
+#ifndef cmp
+  #define cmp(a,b) (*(VAR *)(*(a)) > *(VAR *)(*(b)))
+  #include "quadsort.c"
+  #undef cmp
+#else
+  #include "quadsort.c"
+#endif
+#undef VAR
+#undef FUNC
 
 // This section is outside of 32/64 bit pointer territory, so no cache checks
 // necessary, unless sorting 32+ byte structures.
@@ -426,6 +437,62 @@ void quadsort_size(void *array, size_t nmemb, size_t size, CMPFUNC *cmp)
 
 	free(pti);
 	free(pts);
+}
+
+void* quadsort_size2(void *array, size_t nmemb, size_t size, CMPFUNC *cmp)
+{
+	char **pti, *pta, *pts;
+	size_t index, offset;
+
+	if (nmemb < 2)
+	{
+		return NULL;
+	}
+	pta = (char *) array;
+	pti = (char **) malloc(nmemb * sizeof(char *));
+
+	assert(pti != NULL);
+
+	for (index = offset = 0 ; index < nmemb ; index++)
+	{
+		pti[index] = pta + offset;
+
+		offset += size;
+	}
+
+	switch (sizeof(size_t))
+	{
+		case 4: quadsort32(pti, nmemb, cmp); break;
+		case 8: quadsort64(pti, nmemb, cmp); break;
+	}
+
+	/*for (index = offset = 0 ; index < nmemb ; index++)*/
+	/*{*/
+	/*   printf("%lu:%p:%llu\n", index, pti[index], *(u_int64_t*)pti[index]);*/
+	/*}*/
+  return pti;
+}
+
+unsigned long long** quadsort_u64_ix(u_int64_t *array, size_t nmemb, CMPFUNC *cmp ) {
+  uint64_t **pti, *pta;
+  size_t index;
+
+	if (nmemb < 2) {
+		return NULL;
+	}
+  pta = array;
+  pti = (unsigned long long **)malloc(nmemb * sizeof(*pti));
+	assert(pti != NULL);
+	for (index = 0 ; index < nmemb ; index++) {
+		pti[index] = &pta[index];
+	}
+  quadsort_uint64p(pti, nmemb, NULL);
+	/*for (index = 0; index < nmemb ; index++)*/
+	/*{*/
+	/*   printf("%lu:%p:%llu\n", index, pti[index], *(u_int64_t*)pti[index]);*/
+	/*}*/
+
+  return pti;
 }
 
 #undef QUAD_CACHE
