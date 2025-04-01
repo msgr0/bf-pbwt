@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <omp.h>
 
 #define FREE(x)                                                                \
   do {                                                                         \
@@ -356,7 +357,8 @@ struct pbwtad {
 // c[n] is a pointer to the column
 // p is the `pbwtad` of A and D arrays of the previous column
 // return: `pbwtad` of the current column
-pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
+// TODO: try with using external o and z arrays
+pbwtad *cpbwt_0(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   // NOTE: these two arrays do not need be allocated and free'd each time.
   // it would be possible to allocate it once (per process)
   // and re-use them each time.
@@ -395,6 +397,37 @@ pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   ret->a = a;
   return ret;
 }
+pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
+              size_t *restrict z, size_t *restrict o) {
+  // NOTE: these two arrays do not need be allocated and free'd each time.
+  // it would be possible to allocate it once (per process)
+  // and re-use them each time.
+
+  pbwtad *ret = malloc(sizeof *ret);
+  size_t *a = malloc(n * sizeof *a);
+
+  size_t r = 0, q = 0;
+
+  size_t i;
+  for (i = 0; i < n; i++) {
+    if (c[p->a[i]] == 1) {
+      o[q++] = p->a[i];
+    } else {
+      z[r++] = p->a[i];
+    }
+  }
+
+  assert(r + q == n);
+  for (i = 0; i < r; i++) {
+    a[i] = z[i];
+  }
+  for (i = 0; i < q; i++) {
+    a[r + i] = o[i];
+  }
+
+  ret->a = a;
+  return ret;
+}
 
 #define TEST_LOG
 
@@ -418,6 +451,8 @@ pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
 
 pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
+  size_t *o = malloc(nrow * sizeof *o);
+  size_t *z = malloc(nrow * sizeof *z);
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
@@ -430,21 +465,24 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
     p0->a[j] = j;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
-  pl[0] = cpbwt(nrow, c0, p0);
+  pl[0] = cpbwt(nrow, c0, p0, z, o);
   FREE(p0->a);
   FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    pl[j] = cpbwt(nrow, c0, pl[j - 1]);
+    pl[j] = cpbwt(nrow, c0, pl[j - 1], z, o);
   }
 
-#if 1
+#if 0
   for (size_t j = 0; j < ncol; j++) {
     DPRINT("lin %3zu: ", j);
     DPARR(nrow, pl[j]->a, "%zu ");
   }
 #endif
+  FREE(c0);
+  FREE(o);
+  FREE(z);
   return pl;
 }
 
@@ -482,7 +520,7 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
     c0 = malloc(nrow * sizeof *c0);
     for (j = j * W; j < ncol; j++) {
       fgetcoli(fin, j, nrow, c0, ncol);
-      pb[j] = cpbwt(nrow, c0, pb[j - 1]);
+      pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
     }
     FREE(c0);
     break;
@@ -497,9 +535,9 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
     break;
   }
 
-#if 1
+#if 0
   for (size_t j = 0; j < ncol; j++) {
-    DPRINT("lin %3zu: ", j);
+    DPRINT("ars %3zu: ", j);
     if (pb[j])
       DPARR(nrow, pb[j]->a, "%zu ");
     else
@@ -559,7 +597,7 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
     c0 = malloc(nrow * sizeof *c0);
     for (j = j * W; j < ncol; j++) {
       fgetcoli(fin, j, nrow, c0, ncol);
-      pb[j] = cpbwt(nrow, c0, pb[j - 1]);
+      pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
     }
     FREE(c0);
     break;
@@ -576,7 +614,7 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
     break;
   }
 
-#if 1
+#if 0
   for (size_t j = 0; j < ncol; j++) {
     DPRINT("lin %3zu: ", j);
     if (pb[j])
@@ -591,9 +629,99 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
   return pb;
 }
 
+#define SWAP(x, y)                                                             \
+  do {                                                                         \
+    typeof((x)) tmp = (x);                                                     \
+    (x) = (y);                                                                 \
+    (y) = tmp;                                                                 \
+  } while (0)
+
+pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
+  // NOTE: right now I don't know what I need, so I'm keeping
+  // everything in memory, we'll see later
+  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
+#define W 64
+
+  // first W=(64 for now), must be computed linearly
+  // TODO: ask if true
+
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  pbwtad *p0 = malloc(sizeof *p0);
+  p0->a = malloc(nrow * sizeof *(p0->a));
+  for (int j = 0; j < nrow; j++) {
+    p0->a[j] = j;
+  }
+  fgetcoli(fin, 0, nrow, c0, ncol);
+  pb[0] = cpbwt_0(nrow, c0, p0);
+  FREE(p0->a);
+  FREE(p0);
+
+  for (int j = 1; j < W; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
+  }
+
+  uint64_t *pw0 = malloc(nrow * sizeof *pw0); // the first one is not freed
+  uint64_t *pw1 = malloc(nrow * sizeof *pw1);
+  size_t *aux = malloc(nrow * sizeof *aux);
+  fgetcoliw64r(fin, 0, nrow, pw0, ncol);
+
+  size_t j;
+
+  /*for (j = 1; j * W <= W * 2; j++) {*/
+  for (j = 1; j * W <= ncol - W; j++) {
+    pbwtad *ps = malloc(nrow * sizeof *ps);
+    ps->a = malloc(nrow * sizeof *(ps->a));
+    pb[W * (j + 1) - 1] = ps;
+    memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
+    fgetcoliw64r(fin, j, nrow, pw1, ncol);
+    rrsortx(nrow, pw1, ps->a, aux);
+
+// okay now we should the inner loops, this is the part that
+// can be parallel
+#pragma omp parallel for num_threads(8) shared(pw1, pw0, pb, j)
+    for (size_t x = 1; x < W; x++) {
+      uint64_t *w = malloc(nrow * sizeof *w);
+      size_t J = W * (j + 1) - 1;
+
+      wr64mrgsi(nrow, pw1, pw0, w, x);
+      pbwtad *ps = malloc(nrow * sizeof *ps);
+      ps->a = malloc(nrow * sizeof *(ps->a));
+      pb[J - x] = ps;
+      memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
+      rrsortx(nrow, w, ps->a, aux);
+
+      FREE(w);
+    }
+
+    SWAP(pw0, pw1);
+  }
+
+  c0 = malloc(nrow * sizeof *c0);
+  for (j = j * W; j < ncol; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
+  }
+
+#if 0
+  for (size_t j = 0; j < ncol; j++) {
+    DPRINT("prs %3zu: ", j);
+    if (pb[j])
+      DPARR(nrow, pb[j]->a, "%zu ");
+    else
+      DPRINT(" ---\n");
+  }
+#endif
+  FREE(pw0);
+  FREE(pw1);
+  FREE(aux);
+  FREE(c0);
+  return pb;
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
-    fprintf(stderr, "Usage: %s [lin|ars|aqs] FILE\n", argv[0]);
+    fprintf(stderr, "Usage: %s [lin|ars|aqs|prs] FILE\n", argv[0]);
     return EXIT_FAILURE;
   }
 
@@ -613,6 +741,14 @@ int main(int argc, char *argv[]) {
     wapproxc_rrs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
   } else if (strcmp(argv[1], "aqs") == 0) {
     wapproxc_qs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
+  } else if (strcmp(argv[1], "prs") == 0) {
+    pbwtad **r = wparc_rrs(fin, nrow, ncol);
+    for (size_t i = 0; i < ncol; i++) {
+      if (r[i]) {
+        FREE(r[i]->a);
+        FREE(r[i]);
+      }
+    }
   }
 
   return EXIT_FAILURE;
@@ -650,13 +786,13 @@ int main2(int argc, char *argv[]) {
     p0->a[j] = j;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
-  pl[0] = cpbwt(nrow, c0, p0);
+  pl[0] = cpbwt_0(nrow, c0, p0);
   FREE(p0->a);
   FREE(p0);
 
   for (int j = 1; j < W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    pl[j] = cpbwt(nrow, c0, pl[j - 1]);
+    pl[j] = cpbwt_0(nrow, c0, pl[j - 1]);
     pb[j] = pl[j];
   }
   DPRINT("\tlin %3d: ", W - 1);
@@ -664,7 +800,7 @@ int main2(int argc, char *argv[]) {
 
   for (int j = W; j < 2 * W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    pl[j] = cpbwt(nrow, c0, pl[j - 1]);
+    pl[j] = cpbwt_0(nrow, c0, pl[j - 1]);
   }
   DPRINT("\tlin %3d: ", 2 * W - 1);
   DPARR(nrow, pl[2 * W - 1]->a, "%zu ");
@@ -766,7 +902,7 @@ int maintest(int argc, char *argv[]) {
   parr(nrow, p->a, "%zu ");
   for (int j = 0; j < ncol; j++) {
     fgetcoli(fin, j, nrow, tcol, ncol);
-    p = cpbwt(nrow, tcol, p);
+    p = cpbwt_0(nrow, tcol, p);
     parr(nrow, p->a, "%zu ");
   }
   puts("\n---------- Column reading ----------------------------------\n");
