@@ -473,9 +473,11 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
   FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
+    fprintf(stderr, "\r%10zu/%zu", j + 1, ncol);
     fgetcoli(fin, j, nrow, c0, ncol);
     pl[j] = cpbwt(nrow, c0, pl[j - 1], z, o);
   }
+  fputc(0xA, stderr);
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
@@ -509,6 +511,7 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
+    fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);
     pbwtad *ps = malloc(nrow * sizeof *ps);
     ps->a = malloc(nrow * sizeof *(ps->a));
     pb[W * (j + 1) - 1] = ps;
@@ -537,6 +540,7 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
     rrsortx(nrow, pw, ps->a, aux);
     break;
   }
+  fputc(0xA, stderr);
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
@@ -632,7 +636,6 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
   return pb;
 }
 
-
 pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
@@ -666,6 +669,7 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
   size_t j;
 
   for (j = 1; j * W <= ncol - W; j++) {
+    fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);
     pbwtad *ps = malloc(nrow * sizeof *ps);
     ps->a = malloc(nrow * sizeof *(ps->a));
     pb[W * (j + 1) - 1] = ps;
@@ -696,6 +700,7 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
     fgetcoli(fin, j, nrow, c0, ncol);
     pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
   }
+  fputc(0xA, stderr);
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
@@ -747,6 +752,7 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
 
   /*for (j = 1; j * W <= W * 2; j++) {*/
   for (j = 1; j * W <= ncol - W; j++) {
+    fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);
     pbwtad *ps = malloc(nrow * sizeof *ps);
     ps->a = malloc(nrow * sizeof *(ps->a));
     pb[W * (j + 1) - 1] = ps;
@@ -777,6 +783,7 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
     fgetcoli(fin, j, nrow, c0, ncol);
     pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
   }
+  fputc(0xA, stderr);
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
@@ -1026,7 +1033,6 @@ int maintest(int argc, char *argv[]) {
   puts("\n------------------------------------------------------------\n");
   fgetcoliwgri(fin, 1, nrow, twc, ncol, 6);
   parr(nrow, twp, "%3llu ");
-
 
   fclose(fin);
   return EXIT_SUCCESS;
