@@ -658,7 +658,87 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
     pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
   }
 
-  uint64_t *pw0 = malloc(nrow * sizeof *pw0); // the first one is not freed
+  uint64_t *pw0 = malloc(nrow * sizeof *pw0);
+  uint64_t *pw1 = malloc(nrow * sizeof *pw1);
+  size_t *aux = malloc(nrow * sizeof *aux);
+  fgetcoliw64r(fin, 0, nrow, pw0, ncol);
+
+  size_t j;
+
+  for (j = 1; j * W <= ncol - W; j++) {
+    pbwtad *ps = malloc(nrow * sizeof *ps);
+    ps->a = malloc(nrow * sizeof *(ps->a));
+    pb[W * (j + 1) - 1] = ps;
+    memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
+    fgetcoliw64r(fin, j, nrow, pw1, ncol);
+    rrsortx(nrow, pw1, ps->a, aux);
+
+#pragma omp parallel for shared(pw1, pw0, pb, j)
+    for (size_t x = 1; x < W; x++) {
+      uint64_t *w = malloc(nrow * sizeof *w);
+      size_t J = W * (j + 1) - 1;
+
+      wr64mrgsi(nrow, pw1, pw0, w, x);
+      pbwtad *ps = malloc(nrow * sizeof *ps);
+      ps->a = malloc(nrow * sizeof *(ps->a));
+      pb[J - x] = ps;
+      memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
+      rrsortx_noaux(nrow, w, ps->a);
+
+      FREE(w);
+    }
+
+    SWAP(pw0, pw1);
+  }
+
+  c0 = malloc(nrow * sizeof *c0);
+  for (j = j * W; j < ncol; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
+  }
+
+#if 0
+  for (size_t j = 0; j < ncol; j++) {
+    DPRINT("prs %3zu: ", j);
+    if (pb[j])
+      DPARR(nrow, pb[j]->a, "%zu ");
+    else
+      DPRINT(" ---\n");
+  }
+#endif
+  FREE(pw0);
+  FREE(pw1);
+  FREE(aux);
+  FREE(c0);
+  return pb;
+}
+
+pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
+  // NOTE: right now I don't know what I need, so I'm keeping
+  // everything in memory, we'll see later
+  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
+#define W 64
+
+  // first W=(64 for now), must be computed linearly
+  // TODO: ask if true
+
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  pbwtad *p0 = malloc(sizeof *p0);
+  p0->a = malloc(nrow * sizeof *(p0->a));
+  for (int j = 0; j < nrow; j++) {
+    p0->a[j] = j;
+  }
+  fgetcoli(fin, 0, nrow, c0, ncol);
+  pb[0] = cpbwt_0(nrow, c0, p0);
+  FREE(p0->a);
+  FREE(p0);
+
+  for (int j = 1; j < W; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
+  }
+
+  uint64_t *pw0 = malloc(nrow * sizeof *pw0);
   uint64_t *pw1 = malloc(nrow * sizeof *pw1);
   size_t *aux = malloc(nrow * sizeof *aux);
   fgetcoliw64r(fin, 0, nrow, pw0, ncol);
