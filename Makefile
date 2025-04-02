@@ -2,8 +2,18 @@ CC?=cc
 CFLAGS?=-O3
 
 VPATH=lib/quadsort
-ALL=bf-pbwt 2bfpbwt
+ALL=2bfpbwt pgen
 LIBOMP?=/opt/homebrew/opt/libomp
+
+APPLE_CLANG:=$(shell $(CC) --version | grep "Apple clang" > /dev/null && echo 1 || echo 0)
+
+ifeq ($(APPLE_CLANG),1)
+    CFLAGS += -Xpreprocessor -fopenmp
+    LDFLAGS += -lomp
+else
+    CFLAGS += -fopenmp
+    LDFLAGS += -fopenmp
+endif
 
 debug: CFLAGS=-O0 -g
 
@@ -12,11 +22,8 @@ debug: CFLAGS=-O0 -g
 
 all: ${ALL}
 
-bf-pbwt: bf-pbwt.o
-	${CC} $^ -o $@
-
 2bfpbwt: 2bfpbwt.c
-	${CC} -o $@ ${CFLAGS} -I ${LIBOMP}/include -L ${LIBOMP}/lib -lomp  $^ 
+	${CC} -o $@ ${CFLAGS} -I ${LIBOMP}/include -L ${LIBOMP}/lib $(LDFLAGS) $^ 
 
 gen: gen.c
 	${CC} -O3 $^ -o $@
@@ -24,11 +31,5 @@ gen: gen.c
 pgen: pgen.c
 	${CC} -O3 $^ -o $@
 
-rrsort_test: rrsort_test.c
-	${CC} -O3 $^ -o $@ -march=native
-
 clean:
-	-/bin/rm -f *.o
-
-remove: clean
-	-/bin/rm -i $(ALL)
+	-rm *.o $(ALL)
