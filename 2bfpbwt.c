@@ -207,6 +207,46 @@ void rrsortx(size_t n, uint64_t *c, size_t *s, size_t *aux) {
 /*
  * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
  * using externally allocated `aux[n]` auxiliary array.
+ * This version assumes the `s` array to be already initialized.
+ */
+void rrsortx_noaux(size_t n, uint64_t *c, size_t *s) {
+  size_t *tmp;
+  size_t j;
+  size_t *pre = s;
+  size_t *post = malloc(n * sizeof *post);
+  uint8_t b;
+
+  for (size_t i = 0; i < 8; i++) {
+    size_t cnt[256] = {0};
+
+    // frequencies
+    for (j = 0; j < n; j++) {
+      /*cnt[mask2(c[j], i)]++;*/
+      b = (c[j] >> (8 * i)) & 0xFFULL;
+      cnt[b]++;
+    }
+    // prefix sum
+    for (size_t j = 1; j < 256; j++)
+      cnt[j] += cnt[j - 1];
+    // sorting
+    for (ssize_t j = n - 1; j >= 0; --j) {
+      /*cnt[mask2(c[pre[j]], i)]--;*/
+      /*post[cnt[mask2(c[pre[j]], i)]] = pre[j];*/
+
+      b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
+      cnt[b]--;
+      post[cnt[b]] = pre[j];
+    }
+    // swap s and aux
+    tmp = pre;
+    pre = post;
+    post = tmp;
+  }
+}
+
+/*
+ * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
+ * using externally allocated `aux[n]` auxiliary array.
  * This version initialize the sorting from position 0,
  * meaning that there will be a pass of setting the initial
  * positions array to 1..n
