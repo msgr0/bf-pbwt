@@ -1,15 +1,22 @@
 #include "lib/quadsort/quadsort.h"
 #include <assert.h>
+#include <omp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <omp.h>
 
 #define FREE(x)                                                                \
   do {                                                                         \
     free((x));                                                                 \
     (x) = NULL;                                                                \
+  } while (0)
+
+#define SWAP(x, y)                                                             \
+  do {                                                                         \
+    typeof((x)) tmp = (x);                                                     \
+    (x) = (y);                                                                 \
+    (y) = tmp;                                                                 \
   } while (0)
 
 #define parr(n, a, fmt)                                                        \
@@ -62,8 +69,6 @@ static inline void fgetcoli(FILE *fd, size_t i, size_t n, uint8_t *restrict c,
     fseek(fd, i *W, SEEK_SET);                                                 \
     for (size_t r = 0; r < n; r++) {                                           \
       c[r] = 0;                                                                \
-      /* NOTE: should be tried to do unrolling */                              \
-      /*       check commented version below for how */                        \
       for (size_t s = 0; s < W; s++) {                                         \
         x = fgetc(fd) - 48;                                                    \
         c[r] = (c[r] << 1) | x;                                                \
@@ -102,26 +107,6 @@ static inline void fgetcoli(FILE *fd, size_t i, size_t n, uint8_t *restrict c,
       c[r] = (wp[r] >> (W - i)) | ((wc[r] << i) & mask);                       \
     }                                                                          \
   }
-/*static inline void fgetcoliw8(FILE *fd, size_t i, size_t n,*/
-/*                              uint64_t *restrict c, size_t nc) {*/
-/*  int x;*/
-/*  fseek(fd, i * 8, SEEK_SET);*/
-/*  for (size_t r = 0; r < n; r++) {*/
-/*    c[r] = 0;*/
-/*#ifdef __GNUC__*/
-/*#ifdef __clang__*/
-/*#pragma unroll*/
-/*#else*/
-/*#pragma GCC unroll 8*/
-/*#endif*/
-/*#endif*/
-/*    for (size_t s = 0; s < 8; s++) {*/
-/*      x = fgetc(fd) - 48;*/
-/*      c[r] = (c[r] << 1) | x;*/
-/*    }*/
-/*    fseek(fd, nc - 8 + 1, SEEK_CUR);*/
-/*  }*/
-/*}*/
 
 FGETCOLIW_DECLARE(8)
 FGETCOLIW_DECLARE(16)
@@ -177,11 +162,6 @@ static inline void wrmrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,
   for (size_t r = 0; r < n; r++) {
     c[r] = (wp[r] >> (w - i)) | ((wc[r] << i) & mask);
   }
-}
-
-static inline void _sort_window(size_t n, uint64_t *restrict c) {
-  /*quadsort_uint64(c, n, CMPFUNC *cmp);*/
-  quadsort_prim(c, n, sizeof(long long) + 1);
 }
 
 /*
@@ -273,20 +253,6 @@ void rrsort0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
     pre = post;
     post = tmp;
   }
-}
-
-static inline void _sort_window_brian(size_t n, uint64_t *restrict c) {
-  size_t cnt[256] = {0};
-  for (size_t i = 0; i < 8; i++) {
-    uint8_t b = (c[n] >> (64 - (8 * (i + 1)))) & 0xFF;
-    printf("%zu ", 64 - (8 * (i + 1)));
-  }
-  puts("");
-  for (ssize_t i = 8; i > 0; i--) {
-    uint8_t b = (c[n] >> (8 * (i - 1))) & 0xFF;
-    printf("%zu ", 8 * (i - 1));
-  }
-  puts("");
 }
 
 static inline void fgetcoliwg(FILE *fd, size_t i, size_t n,
@@ -397,18 +363,15 @@ pbwtad *cpbwt_0(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   ret->a = a;
   return ret;
 }
+
 pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
               size_t *restrict z, size_t *restrict o) {
-  // NOTE: these two arrays do not need be allocated and free'd each time.
-  // it would be possible to allocate it once (per process)
-  // and re-use them each time.
-
   pbwtad *ret = malloc(sizeof *ret);
   size_t *a = malloc(n * sizeof *a);
 
   size_t r = 0, q = 0;
-
   size_t i;
+
   for (i = 0; i < n; i++) {
     if (c[p->a[i]] == 1) {
       o[q++] = p->a[i];
@@ -417,7 +380,7 @@ pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
     }
   }
 
-  assert(r + q == n);
+  /*assert(r + q == n);*/
   for (i = 0; i < r; i++) {
     a[i] = z[i];
   }
@@ -629,12 +592,6 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
   return pb;
 }
 
-#define SWAP(x, y)                                                             \
-  do {                                                                         \
-    typeof((x)) tmp = (x);                                                     \
-    (x) = (y);                                                                 \
-    (y) = tmp;                                                                 \
-  } while (0)
 
 pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
@@ -677,10 +634,8 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
     fgetcoliw64r(fin, j, nrow, pw1, ncol);
     rrsortx(nrow, pw1, ps->a, aux);
 
-// okay now we should the inner loops, this is the part that
-// can be parallel
-#pragma omp parallel for num_threads(8) shared(pw1, pw0, pb, j)
     for (size_t x = 1; x < W; x++) {
+
       uint64_t *w = malloc(nrow * sizeof *w);
       size_t J = W * (j + 1) - 1;
 
@@ -734,24 +689,30 @@ int main(int argc, char *argv[]) {
   size_t nrow, ncol;
   fgetrc(fin, &nrow, &ncol);
   DPRINT("[%s] row: %5zu, col: %5zu\n", __func__, nrow, ncol);
+  pbwtad **r;
 
   if (strcmp(argv[1], "lin") == 0) {
-    linc(fin, nrow, ncol);
+    r = linc(fin, nrow, ncol);
   } else if (strcmp(argv[1], "ars") == 0) {
-    wapproxc_rrs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
+    r = wapproxc_rrs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
   } else if (strcmp(argv[1], "aqs") == 0) {
-    wapproxc_qs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
+    fprintf(stderr, "\e[0;33mWARNING: this is not been properly tested and "
+                    "might not work.\e[0m\n");
+    r = wapproxc_qs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
   } else if (strcmp(argv[1], "prs") == 0) {
-    pbwtad **r = wparc_rrs(fin, nrow, ncol);
-    for (size_t i = 0; i < ncol; i++) {
-      if (r[i]) {
-        FREE(r[i]->a);
-        FREE(r[i]);
-      }
+    r = wparc_rrs(fin, nrow, ncol);
+  } else if (strcmp(argv[1], "srs") == 0) {
+    r = wseq_rrs(fin, nrow, ncol);
+  }
+
+  for (size_t i = 0; i < ncol; i++) {
+    if (r[i]) {
+      FREE(r[i]->a);
+      FREE(r[i]);
     }
   }
 
-  return EXIT_FAILURE;
+  return EXIT_SUCCESS;
 }
 
 int main2(int argc, char *argv[]) {
@@ -946,7 +907,6 @@ int maintest(int argc, char *argv[]) {
   fgetcoliwgri(fin, 1, nrow, twc, ncol, 6);
   parr(nrow, twp, "%3llu ");
 
-  _sort_window_brian(nrow, tc);
 
   fclose(fin);
   return EXIT_SUCCESS;
