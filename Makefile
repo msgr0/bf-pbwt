@@ -18,6 +18,9 @@ bf-pbwt: bf-pbwt.o
 2bfpbwt: 2bfpbwt.c
 	${CC} -o $@ ${CFLAGS} -I ${LIBOMP}/include -L ${LIBOMP}/lib -lomp  $^ 
 
+gen: gen.c
+	${CC} -O3 $^ -o $@
+
 pgen: pgen.c
 	${CC} -O3 $^ -o $@
 
