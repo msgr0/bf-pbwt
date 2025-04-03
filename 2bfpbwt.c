@@ -62,6 +62,60 @@ static inline void fgetcoli(FILE *fd, size_t i, size_t n, uint8_t *restrict c,
   }
 }
 
+// get column i from file
+// c[n] is a pointer to store the column,
+// nc is total number of columns, needed for fseek
+static inline void bfgetcoln(FILE *fd, size_t n, uint8_t *restrict c,
+                             size_t nc) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+
+#define BFGETCOLI_BUF_SIZE 128
+  static size_t i = 0;
+  static size_t bufn = BFGETCOLI_BUF_SIZE;
+  static uint8_t *buf = NULL;
+  if (!buf)
+    buf = malloc(BFGETCOLI_BUF_SIZE * n * sizeof *buf);
+
+  /*printf("[%s] i:%zu\n", __func__, i);*/
+  if (bufn == BFGETCOLI_BUF_SIZE) {
+    /*puts("refill");*/
+    int x;
+    fseek(fd, i, SEEK_SET);
+    for (size_t r = 0; r < n; r++) {
+      for (size_t s = 0; s < BFGETCOLI_BUF_SIZE; s++) {
+        x = fgetc(fd) - 48;
+        /*if (x != 0 && x != 1) {*/
+        /*  printf("  x:%d\n", x);*/
+        /*  exit(203);*/
+        /*}*/
+        /*buf[(r * n) + s] = x;*/
+        buf[(n * s) + r] = x;
+      }
+      /*c[r] = buf[r * n];*/
+      c[r] = buf[r];
+      /*if (c[r] != 0 && c[r] != 1)*/
+      /*  exit(201);*/
+      fseek(fd, nc - BFGETCOLI_BUF_SIZE + 1, SEEK_CUR);
+    }
+    bufn = 1;
+  } else {
+    /*printf("  ixs: ");*/
+    for (size_t r = 0; r < n; r++) {
+      /*c[r] = buf[(r * n) + bufn];*/
+      c[r] = buf[(n * bufn) + r];
+      /*if (c[r] != 0 && c[r] != 1) {*/
+      /*  printf("  c[%zu]:%d\n", r, c[r]);*/
+      /*  exit(202);*/
+      /*}*/
+      /*printf("%zu ", (r * n) + bufn);*/
+      /*printf("%zu ", (n * bufn) + r);*/
+    }
+    bufn++;
+  }
+  i++;
+}
+
 #define FGETCOLIW_DECLARE(W)                                                   \
   static inline void fgetcoliw##W(FILE *fd, size_t i, size_t n,                \
                                   uint64_t *restrict c, size_t nc) {           \
@@ -404,31 +458,61 @@ pbwtad *cpbwt_0(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   return ret;
 }
 
-pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
-              size_t *restrict z, size_t *restrict o) {
+pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p, size_t *_o,
+              size_t *_z) {
+  static size_t *o = NULL;
+  if (!o)
+    o = malloc(n * sizeof *o);
+
   pbwtad *ret = malloc(sizeof *ret);
-  size_t *a = malloc(n * sizeof *a);
+  ret->a = malloc(n * sizeof *(ret->a));
 
   size_t r = 0, q = 0;
   size_t i;
 
+  /*for (i = 0; i < n; i++) {*/
+  /*  if (c[i] != 0 && c[i] != 1) {*/
+  /*    printf("c[%zu]=%hhu\n", i, c[i]);*/
+  /*    exit(22);*/
+  /*  }*/
+  /*  if (p->a[i] > n) {*/
+  /*    printf("p-a[%zu]=%zu (>%zu)\n", i, p->a[i], n);*/
+  /*    exit(23);*/
+  /*  }*/
+  /*}*/
+#if 0
   for (i = 0; i < n; i++) {
+    /*printf("i: %6zu - p->a[i]: %zu\n", i, p->a[i]);*/
     if (c[p->a[i]] == 1) {
       o[q++] = p->a[i];
     } else {
-      z[r++] = p->a[i];
+      ret->a[r++] = p->a[i];
+      /*z[r++] = p->a[i];*/
     }
   }
+#elif 1
+#else
+  for (i = 0; i < n; i++) {
+    size_t idx = p->a[i];
+    size_t mask = c[idx]; // 1 if true, 0 if false
+    o[q] = idx;
+    ret->a[r] = idx;
+    q += mask;     // Increment q if mask is 1
+    r += mask ^ 1; // Increment r if mask is 0
+  }
+#endif
 
-  /*assert(r + q == n);*/
+#if 0
   for (i = 0; i < r; i++) {
-    a[i] = z[i];
+    ret->a[i] = z[i];
   }
   for (i = 0; i < q; i++) {
-    a[r + i] = o[i];
+    ret->a[r + i] = o[i];
   }
+#else
+  memcpy(ret->a + r, o, q * sizeof(size_t));
+#endif
 
-  ret->a = a;
   return ret;
 }
 
@@ -473,7 +557,7 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
   FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
-    fprintf(stderr, "\r%10zu/%zu", j + 1, ncol);
+    /*fprintf(stderr, "\r%10zu/%zu", j + 1, ncol);*/
     fgetcoli(fin, j, nrow, c0, ncol);
     pl[j] = cpbwt(nrow, c0, pl[j - 1], z, o);
   }
@@ -481,7 +565,61 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
-    DPRINT("lin %3zu: ", j);
+    /*DPRINT("lin %3zu: ", j);*/
+    DPRINT("%3zu: ", j);
+    DPARR(nrow, pl[j]->a, "%zu ");
+  }
+#endif
+  FREE(c0);
+  FREE(o);
+  FREE(z);
+  return pl;
+}
+pbwtad **blinc(FILE *fin, size_t nrow, size_t ncol) {
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  size_t *o = malloc(nrow * sizeof *o);
+  size_t *z = malloc(nrow * sizeof *z);
+  // NOTE: right now I don't know what I need, so I'm keeping
+  // everything in memory, we'll see later
+  pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
+  if (!pl)
+    return NULL;
+
+  pbwtad *p0 = malloc(sizeof *p0);
+  p0->a = malloc(nrow * sizeof *(p0->a));
+  for (int j = 0; j < nrow; j++) {
+    p0->a[j] = j;
+  }
+  bfgetcoln(fin, nrow, c0, ncol);
+  /*parr(nrow, c0, "%d ");*/
+  pl[0] = cpbwt(nrow, c0, p0, z, o);
+  FREE(p0->a);
+  FREE(p0);
+  /*for (size_t i = 0; i < nrow; i++) {*/
+  /*  if (c0[i] != 0 && c0[i] != 1) {*/
+  /*    printf("c[%zu]=%hhu\n", i, c0[i]);*/
+  /*    exit(122);*/
+  /*  }*/
+  /*}*/
+
+  for (size_t j = 1; j < ncol; j++) {
+    /*fprintf(stderr, "\r%10zu/%zu", j + 1, ncol);*/
+    /*fprintf(stderr, "\r%10zu/%zu\n", j + 1, ncol);*/
+    bfgetcoln(fin, nrow, c0, ncol);
+    /*for (size_t i = 0; i < nrow; i++) {*/
+    /*  if (c0[i] != 0 && c0[i] != 1) {*/
+    /*    printf("c0[%zu]=%hhu\n", i, c0[i]);*/
+    /*    exit(122);*/
+    /*  }*/
+    /*}*/
+    pl[j] = cpbwt(nrow, c0, pl[j - 1], z, o);
+  }
+  fputc(0xA, stderr);
+
+#if 0
+  for (size_t j = 0; j < ncol; j++) {
+    /*DPRINT("bli %3zu: ", j);*/
+    DPRINT("%3zu: ", j);
     DPARR(nrow, pl[j]->a, "%zu ");
   }
 #endif
@@ -511,7 +649,7 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);
+    /*fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);*/
     pbwtad *ps = malloc(nrow * sizeof *ps);
     ps->a = malloc(nrow * sizeof *(ps->a));
     pb[W * (j + 1) - 1] = ps;
@@ -803,7 +941,7 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
-    fprintf(stderr, "Usage: %s [lin|ars|aqs|prs] FILE\n", argv[0]);
+    fprintf(stderr, "Usage: %s [lin|bli|ars|aqs|prs] FILE\n", argv[0]);
     return EXIT_FAILURE;
   }
 
@@ -820,6 +958,8 @@ int main(int argc, char *argv[]) {
 
   if (strcmp(argv[1], "lin") == 0) {
     r = linc(fin, nrow, ncol);
+  } else if (strcmp(argv[1], "bli") == 0) {
+    r = blinc(fin, nrow, ncol);
   } else if (strcmp(argv[1], "ars") == 0) {
     r = wapproxc_rrs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
   } else if (strcmp(argv[1], "aqs") == 0) {
@@ -830,6 +970,8 @@ int main(int argc, char *argv[]) {
     r = wparc_rrs(fin, nrow, ncol);
   } else if (strcmp(argv[1], "srs") == 0) {
     r = wseq_rrs(fin, nrow, ncol);
+  } else {
+    return EXIT_FAILURE;
   }
 
   for (size_t i = 0; i < ncol; i++) {
@@ -842,13 +984,13 @@ int main(int argc, char *argv[]) {
   return EXIT_SUCCESS;
 }
 
-int main2(int argc, char *argv[]) {
+int maint(int argc, char *argv[]) {
   if (argc < 2) {
-    fprintf(stderr, "Usage: %s FILE\n", argv[0]);
+    fprintf(stderr, "Usage: %s [lin|ars|aqs|prs] FILE\n", argv[0]);
     return EXIT_FAILURE;
   }
 
-  FILE *fin = fopen(argv[1], "r");
+  FILE *fin = fopen(argv[2], "r");
   if (!fin) {
     perror("[main]");
     return EXIT_FAILURE;
@@ -856,184 +998,33 @@ int main2(int argc, char *argv[]) {
 
   size_t nrow, ncol;
   fgetrc(fin, &nrow, &ncol);
-
   DPRINT("[%s] row: %5zu, col: %5zu\n", __func__, nrow, ncol);
 
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
-  pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
-  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
-  // first W=(64 for now), must be computed linearly
-  // TODO: ask if true
-
-  pbwtad *p0 = malloc(sizeof *p0);
-  p0->a = malloc(nrow * sizeof *(p0->a));
-  for (int j = 0; j < nrow; j++) {
-    p0->a[j] = j;
-  }
+  bfgetcoln(fin, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
   fgetcoli(fin, 0, nrow, c0, ncol);
-  pl[0] = cpbwt_0(nrow, c0, p0);
-  FREE(p0->a);
-  FREE(p0);
+  parr(nrow, c0, "%d ");
+  bfgetcoln(fin, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
+  fgetcoli(fin, 1, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
+  bfgetcoln(fin, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
+  fgetcoli(fin, 2, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
+  bfgetcoln(fin, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
+  fgetcoli(fin, 3, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
+  bfgetcoln(fin, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
+  fgetcoli(fin, 4, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
+  bfgetcoln(fin, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
+  fgetcoli(fin, 5, nrow, c0, ncol);
+  parr(nrow, c0, "%d ");
 
-  for (int j = 1; j < W; j++) {
-    fgetcoli(fin, j, nrow, c0, ncol);
-    pl[j] = cpbwt_0(nrow, c0, pl[j - 1]);
-    pb[j] = pl[j];
-  }
-  DPRINT("\tlin %3d: ", W - 1);
-  DPARR(nrow, pl[W - 1]->a, "%zu ");
-
-  for (int j = W; j < 2 * W; j++) {
-    fgetcoli(fin, j, nrow, c0, ncol);
-    pl[j] = cpbwt_0(nrow, c0, pl[j - 1]);
-  }
-  DPRINT("\tlin %3d: ", 2 * W - 1);
-  DPARR(nrow, pl[2 * W - 1]->a, "%zu ");
-
-  // now let's start with the others.
-  // First I need to get the bitpack of the first (computed) W cols
-  uint64_t *pw0 = malloc(nrow * sizeof *pw0);
-  uint64_t *pw1 = malloc(nrow * sizeof *pw1);
-  size_t *aux = malloc(nrow * sizeof *aux);
-  fgetcoliw64r(fin, 0, nrow, pw0, ncol);
-  /*fgetcoliw64r(fin, 1, nrow, pw1, ncol);*/
-  // FIXME: for non W-divisible input
-
-  size_t j;
-  /*for (j = 1; j < 2; j++) {*/
-  /*  pbwtad *ps = malloc(nrow * sizeof *ps);*/
-  /*  ps->a = malloc(nrow * sizeof *(ps->a));*/
-  /*  pb[W * (j + 1) - 1] = ps;*/
-  /*  memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));*/
-  /*  fgetcoliw64r(fin, j, nrow, pw1, ncol);*/
-  /*  rrsortx(nrow, pw1, ps->a, aux);*/
-  /**/
-  /*  pw0 = pw1;*/
-  /*}*/
-  /*DPRINT("\trrs %3d: ", 2 * W - 1);*/
-  /*DPARR(nrow, pb[2 * W - 1]->a, "%zu ");*/
-
-  for (j = 1; j * W <= ncol - W; j++) {
-    pbwtad *ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
-    pb[W * (j + 1) - 1] = ps;
-    memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
-    fgetcoliw64r(fin, j, nrow, pw1, ncol);
-    rrsortx(nrow, pw1, ps->a, aux);
-
-    pw0 = pw1;
-    DPRINT("\trrs %3zu: ", (j + 1) * W - 1);
-    DPARR(nrow, pb[(j + 1) * W - 1]->a, "%zu ");
-  }
-  /*for (j = j * W; j < ncol; j++) {*/
-  /*  fgetcoli(fin, j, nrow, c0, ncol);*/
-  /*  pb[j] = cpbwt(nrow, c0, pb[j - 1]);*/
-  /*  DPRINT("\tlin %3zu: ", j);*/
-  /*  DPARR(nrow, pb[j]->a, "%zu ");*/
-  /*}*/
-
-  j *= W;
-  fgetcoliwgri(fin, j, nrow, pw1, ncol, ncol - j);
-  pbwtad *ps = malloc(nrow * sizeof *ps);
-  ps->a = malloc(nrow * sizeof *(ps->a));
-  pb[ncol - 1] = ps;
-  memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
-  rrsortx(nrow, pw1, ps->a, aux);
-  DPRINT("\tlin %3zu: ", ncol - 1);
-  DPARR(nrow, pb[ncol - 1]->a, "%zu ");
-
-#if 0 // NOTE: just a test that window work as expected
-  uint64_t *sorted = malloc(nrow * sizeof *sorted);
-  uint64_t *aux = malloc(nrow * sizeof *aux);
-  rrsort0(nrow, pw0, sorted, aux);
-  DPRINT("\trrs: ");
-  DPARR(nrow, sorted, "%llu ");
-
-  uint64_t **qsp = quadsort_u64_ix(pw0, nrow, NULL);
-  DPRINT("\tqds: ");
-  for (size_t i = 0; i < nrow; i++) {
-    DPRINT("%ld ", qsp[i] - pw0);
-  }
-  puts("");
-#endif
-
-  return EXIT_SUCCESS;
-}
-
-int maintest(int argc, char *argv[]) {
-  if (argc < 2) {
-    fprintf(stderr, "Usage: %s FILE\n", argv[0]);
-    return EXIT_FAILURE;
-  }
-
-  FILE *fin = fopen(argv[1], "r");
-  if (!fin) {
-    perror("[main]");
-    return EXIT_FAILURE;
-  }
-
-  size_t nrow, ncol;
-  fgetrc(fin, &nrow, &ncol);
-  printf("row: %zu, col:%zu\n", nrow, ncol);
-
-  uint8_t *tcol = malloc(nrow * sizeof *tcol);
-
-  pbwtad *p = malloc(sizeof *p);
-  p->a = malloc(nrow * sizeof *(p->a));
-  for (int j = 0; j < nrow; j++) {
-    p->a[j] = j;
-  }
-
-  parr(nrow, p->a, "%zu ");
-  for (int j = 0; j < ncol; j++) {
-    fgetcoli(fin, j, nrow, tcol, ncol);
-    p = cpbwt_0(nrow, tcol, p);
-    parr(nrow, p->a, "%zu ");
-  }
-  puts("\n---------- Column reading ----------------------------------\n");
-
-  uint64_t *tmcol = malloc(nrow * sizeof *tmcol);
-
-  fgetcoliwg(fin, 0, nrow, tmcol, ncol, 8);
-  parr(nrow, tmcol, "%llu ");
-  fgetcoliw8(fin, 0, nrow, tmcol, ncol);
-  parr(nrow, tmcol, "%llu ");
-
-  puts("   .... reverse ....");
-  fgetcoliwgr(fin, 0, nrow, tmcol, ncol, 8);
-  parr(nrow, tmcol, "%llu ");
-  fgetcoliw8r(fin, 0, nrow, tmcol, ncol);
-  parr(nrow, tmcol, "%llu ");
-  puts("\n---------- Shifting of windows -----------------------------\n");
-
-  uint64_t *twc = malloc(nrow * sizeof *twc);
-  uint64_t *twp = malloc(nrow * sizeof *twp);
-  uint64_t *tc = malloc(nrow * sizeof *tc);
-
-  fgetcoliw8(fin, 0, nrow, twp, ncol);
-  fgetcoliw8(fin, 1, nrow, twc, ncol);
-  parr(nrow, twp, "%3llu ");
-  parr(nrow, twc, "%3llu ");
-
-  w8mrgsi(nrow, twc, twp, tc, 3);
-  parr(nrow, tc, "%3llu ");
-
-  puts("   .... reverse ....");
-  fgetcoliw8r(fin, 0, nrow, twp, ncol);
-  fgetcoliw8r(fin, 1, nrow, twc, ncol);
-  parr(nrow, twp, "%3llu ");
-  parr(nrow, twc, "%3llu ");
-
-  wrmrgsi(nrow, twc, twp, tc, 2, 8);
-  parr(nrow, tc, "%3llu ");
-
-  puts("\n------------------------------------------------------------\n");
-  fgetcoliwgri(fin, 1, nrow, twc, ncol, 6);
-  parr(nrow, twp, "%3llu ");
-
-  fclose(fin);
   return EXIT_SUCCESS;
 }
