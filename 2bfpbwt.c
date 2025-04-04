@@ -538,16 +538,6 @@ pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p, size_t *_o,
   size_t r = 0, q = 0;
   size_t i;
 
-  /*for (i = 0; i < n; i++) {*/
-  /*  if (c[i] != 0 && c[i] != 1) {*/
-  /*    printf("c[%zu]=%hhu\n", i, c[i]);*/
-  /*    exit(22);*/
-  /*  }*/
-  /*  if (p->a[i] > n) {*/
-  /*    printf("p-a[%zu]=%zu (>%zu)\n", i, p->a[i], n);*/
-  /*    exit(23);*/
-  /*  }*/
-  /*}*/
 #if 0
   for (i = 0; i < n; i++) {
     /*printf("i: %6zu - p->a[i]: %zu\n", i, p->a[i]);*/
@@ -558,7 +548,6 @@ pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p, size_t *_o,
       /*z[r++] = p->a[i];*/
     }
   }
-#elif 1
 #else
   for (i = 0; i < n; i++) {
     size_t idx = p->a[i];
@@ -1102,6 +1091,7 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "srs") == 0) {
     r = wseq_rrs(fin, nrow, ncol);
   } else {
+    fprintf(stderr, "Usage: %s [lin|bli|ars|aqs|bar|prs] FILE\n", argv[0]);
     return EXIT_FAILURE;
   }
 
