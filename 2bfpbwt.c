@@ -430,18 +430,14 @@ static void bfgetcolwgrn(FILE *fd, size_t n, uint64_t *restrict c, size_t nc,
   if (!buf)
     buf = malloc(BFGETCOLWR_BUF_SIZE * n * sizeof *buf);
 
-  /*printf("[%s] i:%zu\n", __func__, i);*/
   if (bufn == BFGETCOLWR_BUF_SIZE) {
-    /*puts("refill");*/
     uint64_t x;
     fseek(fd, i * w, SEEK_SET);
     for (size_t r = 0; r < n; r++) {
       for (size_t s = 0; s < BFGETCOLWR_BUF_SIZE; s++) {
         buf[(n * s) + r] = 0; // buf[n,s]
-        /*printf("  r:%zu,s:%zu\n", r, s);*/
         for (size_t j = 0; j < w; j++) {
           x = fgetc(fd) - 48;
-          /*printf("%llu\n", x);*/
           buf[(n * s) + r] = (x << j) | buf[(n * s) + r];
         }
       }
@@ -452,7 +448,6 @@ static void bfgetcolwgrn(FILE *fd, size_t n, uint64_t *restrict c, size_t nc,
   } else {
     for (size_t r = 0; r < n; r++) {
       c[r] = buf[(n * bufn) + r];
-      /*printf("  c[%zu]:%llu\n", r, c[r]);*/
     }
     bufn++;
   }
@@ -779,32 +774,16 @@ pbwtad **wbapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
   pbwtad *ps = malloc(nrow * sizeof *ps);
   ps->a = malloc(nrow * sizeof *(ps->a));
   pb[W - 1] = ps;
-  /*bfgetcolwgrn(fin, nrow, pw, ncol, 64);*/
   bfgetcolw64rn(fin, nrow, pw, ncol);
-  /*printf("pw ");*/
-  /*parr(nrow, pw, "%llu ");*/
-  /*printf("ps.a: ");*/
-  /*parr(nrow, ps->a, "%zu ");*/
   rrsort0(nrow, pw, ps->a, aux);
-  /*printf("ps.a: ");*/
-  /*parr(nrow, ps->a, "%zu ");*/
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    /*fprintf(stderr, "\r%10zu/%zu", (j + 1) * W, ncol);*/
-    /*printf("%10zu/%zu\n", (j + 1) * W, ncol);*/
     pbwtad *ps = malloc(nrow * sizeof *ps);
     ps->a = malloc(nrow * sizeof *(ps->a));
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
-    /*printf("ps.a: ");*/
-    /*parr(nrow, ps->a, "%zu ");*/
-    /*bfgetcolwgrn(fin, nrow, pw, ncol, 64);*/
     bfgetcolw64rn(fin, nrow, pw, ncol);
-    /*printf("pw ");*/
-    /*parr(nrow, pw, "%llu ");*/
-    /*printf("ps.a: ");*/
-    /*parr(nrow, ps->a, "%zu ");*/
     rrsortx(nrow, pw, ps->a, aux);
   }
 
