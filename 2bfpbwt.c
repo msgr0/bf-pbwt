@@ -71,6 +71,7 @@ static inline void bfgetcoln(FILE *fd, size_t n, uint8_t *restrict c,
   // 1-byte size for each character
 
 #define BFGETCOLI_BUF_SIZE 128
+  static char rbuf[BFGETCOLI_BUF_SIZE];
   static size_t i = 0;
   static size_t bufn = BFGETCOLI_BUF_SIZE;
   static uint8_t *buf = NULL;
@@ -83,8 +84,11 @@ static inline void bfgetcoln(FILE *fd, size_t n, uint8_t *restrict c,
     int x;
     fseek(fd, i, SEEK_SET);
     for (size_t r = 0; r < n; r++) {
+
+      fread(rbuf, 1, BFGETCOLI_BUF_SIZE, fd);
       for (size_t s = 0; s < BFGETCOLI_BUF_SIZE; s++) {
-        x = fgetc(fd) - 48;
+        /*x = fgetc(fd) - 48;*/
+        x = rbuf[s] - 48;
         /*if (x != 0 && x != 1) {*/
         /*  printf("  x:%d\n", x);*/
         /*  exit(203);*/
@@ -526,7 +530,7 @@ pbwtad *cpbwt_0(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   return ret;
 }
 
-pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p, size_t *_o,
+static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p, size_t *_o,
               size_t *_z) {
   static size_t *o = NULL;
   if (!o)
