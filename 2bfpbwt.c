@@ -1154,10 +1154,10 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "bli") == 0) {
     r = blinc(fin, nrow, ncol);
   } else if (strcmp(argv[1], "blis") == 0) {
-    fclose(fin);
-    fin = NULL;
-    /*r = blinc(fin, nrow, ncol);*/
-    r = NULL;
+    /*fclose(fin);*/
+    /*fin = NULL;*/
+    int fd = open(argv[2], O_RDONLY);
+    r = sblinc(fd, nrow, ncol);
   } else if (strcmp(argv[1], "ars") == 0) {
     r = wapproxc_rrs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
   } else if (strcmp(argv[1], "aqs") == 0) {
@@ -1175,7 +1175,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  fclose(fin);
+  /*fclose(fin);*/
 
   if (r)
     for (size_t i = 0; i < ncol; i++) {
