@@ -1175,9 +1175,29 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+#ifdef DTEST_VLIN
+  fprintf(stderr, "\e[0;33mWARNING: this will take a while.\e[0m\n");
+  pbwtad **ctrl = blinc(fin, nrow, ncol);
+  if (r == NULL || ctrl == NULL) {
+    fprintf(stderr, "\e[0;31mERROR: something went wrong.\e[0m\n");
+    exit(5);
+  }
+  size_t ctrltot = 0;
+  for (size_t i = 0; i < ncol; i++) {
+    fprintf(stderr, "\rTesting: %10zu/%zu", i + 1, ncol);
+    if (r[i]) {
+      for (size_t j = 0; j < nrow; j++) {
+        assert(r[i]->a[j] == ctrl[i]->a[j]);
+      }
+      ctrltot++;
+    }
+  }
+  fprintf(stderr, "  (real %zu)\nDone.\n", ctrltot);
+#endif
+
   /*fclose(fin);*/
 
-  if (r)
+  if (r != NULL)
     for (size_t i = 0; i < ncol; i++) {
       if (r[i]) {
         FREE(r[i]->a);
