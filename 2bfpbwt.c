@@ -397,6 +397,7 @@ void rrsortx_noaux(size_t n, uint64_t *c, size_t *s) {
     pre = post;
     post = tmp;
   }
+  FREE(post);
 }
 
 /*
@@ -1160,7 +1161,6 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
     SWAP(pw0, pw1);
   }
 
-  c0 = malloc(nrow * sizeof *c0);
   for (j = j * W; j < ncol; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
     pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
