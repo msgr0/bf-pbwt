@@ -1,7 +1,5 @@
 # editors, os and stuff
 .vscode
-.DS_Store
-*/.DS_Store
 
 # intermediates
 *.o
@@ -10,5 +8,3 @@
 bf-pbwt
 2bfpbwt
 pgen
-
-/paper
