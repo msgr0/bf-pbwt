@@ -670,9 +670,9 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
 #endif
 
 #if 0
-  for (i = 0; i < r; i++) {
-    ret->a[i] = z[i];
-  }
+  /*for (i = 0; i < r; i++) {*/
+  /*  ret->a[i] = z[i];*/
+  /*}*/
   for (i = 0; i < q; i++) {
     ret->a[r + i] = o[i];
   }
@@ -987,26 +987,26 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol,
 
   uint8_t *c0 = NULL;
   // TODO: complete this
-  fprintf(stderr, "TODO: last column");
-  /*switch (lastmode) {*/
-  /*case APPROX_MODE_LAST_LIN:*/
-  /*  c0 = malloc(nrow * sizeof *c0);*/
-  /*  for (j = j * W; j < ncol; j++) {*/
-  /*    fgetcoli(fin, j, nrow, c0, ncol);*/
-  /*    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);*/
-  /*  }*/
-  /*  FREE(c0);*/
-  /*  break;*/
-  /*case APPROX_MODE_LAST_WINDOW:*/
-  /*  j *= W;*/
-  /*  fgetcoliwgri(fin, j, nrow, pw, ncol, ncol - j);*/
-  /*  pbwtad *ps = malloc(nrow * sizeof *ps);*/
-  /*  ps->a = malloc(nrow * sizeof *(ps->a));*/
-  /*  pb[ncol - 1] = ps;*/
-  /*  memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));*/
-  /*  rrsortx(nrow, pw, ps->a, aux);*/
-  /*  break;*/
-  /*}*/
+  switch (lastmode) {
+  case APPROX_MODE_LAST_LIN:
+    /*  c0 = malloc(nrow * sizeof *c0);*/
+    /*  for (j = j * W; j < ncol; j++) {*/
+    /*    fgetcoli(fin, j, nrow, c0, ncol);*/
+    /*    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);*/
+    /*  }*/
+    /*  FREE(c0);*/
+    fprintf(stderr, "\e[0;33mWARNING: this is not implemented. Fallback on "
+                    "APPROX_MODE_LAST_WINDOW.\e[0m\n");
+  case APPROX_MODE_LAST_WINDOW:
+    j *= W;
+    sfgetcoliwgri(fin, j, nrow, pw, ncol, ncol - j);
+    pbwtad *ps = malloc(nrow * sizeof *ps);
+    ps->a = malloc(nrow * sizeof *(ps->a));
+    pb[ncol - 1] = ps;
+    memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
+    rrsortx(nrow, pw, ps->a, aux);
+    break;
+  }
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
@@ -1417,13 +1417,15 @@ int main(int argc, char *argv[]) {
 
   /*fclose(fin);*/
 
-  if (r != NULL)
+  if (r != NULL) {
     for (size_t i = 0; i < ncol; i++) {
       if (r[i]) {
         FREE(r[i]->a);
         FREE(r[i]);
       }
     }
+    FREE(r);
+  }
 
   return EXIT_SUCCESS;
 }
