@@ -2,7 +2,7 @@ CC?=cc
 CFLAGS?=-O3
 
 VPATH=lib/quadsort
-ALL=2bfpbwt pgen
+ALL=2bfpbwt gen
 LIBOMP?=/opt/homebrew/opt/libomp
 
 APPLE_CLANG:=$(shell $(CC) --version | grep "Apple clang" > /dev/null && echo 1 || echo 0)
@@ -27,9 +27,8 @@ all: ${ALL}
 
 gen: gen.c
 	${CC} -O3 $^ -o $@
-
-pgen: pgen.c
-	${CC} -O3 $^ -o $@
-
+	
 clean:
 	-rm *.o $(ALL)
+
+
