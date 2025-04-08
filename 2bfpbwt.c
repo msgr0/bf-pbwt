@@ -840,14 +840,15 @@ pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
     sbfgetcoln(fin, nrow, c0, ncol);
     pl[j] = cpbwt(nrow, c0, pl[j - 1], z, o);
   }
-  fputc(0xA, stderr);
+  fputc(0xA, stdout);
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
-    /*DPRINT("bli %3zu: ", j);*/
-    DPRINT("%3zu: ", j);
+    /*DPRINT("bli %3zu(%p): ", j, pl[j]);*/
+    DPRINT("%3zu(%p): ", j, pl[j]->a);
     DPARR(nrow, pl[j]->a, "%zu ");
   }
+  DPRINT("\n");
 #endif
   FREE(c0);
   FREE(o);
@@ -1263,7 +1264,6 @@ pbwtad **bwparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
     SWAP(pw0, pw1);
   }
 
-  c0 = malloc(nrow * sizeof *c0);
   for (j = j * W; j < ncol; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
     pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
@@ -1503,6 +1503,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+/*#define DTEST_VLIN*/
 #ifdef DTEST_VLIN
   fprintf(stderr, "\e[0;33mWARNING: this will take a while.\e[0m\n");
   pbwtad **ctrl = blinc(fin, nrow, ncol);
