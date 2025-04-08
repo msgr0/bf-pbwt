@@ -26,7 +26,7 @@ process BFPBWT{
 
 workflow {
     // exe = Channel.fromPath("$params.exe")
-    runtype_ch = Channel.of("bli", "bar", "blis", "bars", "bpr") | view
+    runtype_ch = Channel.of("bli", "bar", "blis", "bars", "bpr", "prs", "spr") | view
     input_ch = Channel.fromPath("$params.input/*.bm") | view
 
 
