@@ -585,6 +585,27 @@ static inline void fgetcoliwgri(FILE *fd, size_t i, size_t n,
   }
 }
 
+static inline void sfgetcoliwgri(int fd, size_t i, size_t n,
+                                 uint64_t *restrict c, size_t nc, uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+  uint64_t x;
+  uint8_t _x;
+  lseek(fd, i, SEEK_SET);
+  for (size_t r = 0; r < n; r++) {
+    c[r] = 0;
+    /*printf("r(");*/
+    for (size_t s = 0; s < w; s++) {
+      read(fd, &_x, 1);
+      x = _x - 48;
+      /*printf("%llu", x);*/
+      c[r] = (x << s) | c[r];
+    }
+    /*printf(")=%llu\n", c[r]);*/
+    lseek(fd, nc - w + 1, SEEK_CUR);
+  }
+}
+
 typedef struct pbwtad pbwtad;
 struct pbwtad {
   size_t *a;
@@ -1265,6 +1286,91 @@ pbwtad **bwparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
   return pb;
 }
 
+pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
+  // NOTE: right now I don't know what I need, so I'm keeping
+  // everything in memory, we'll see later
+  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
+#define W 64
+
+  // first W must be computed linearly
+
+  FILE *fin = fopen(fpath, "r");
+  if (!fin) {
+    perror("[spr]");
+    exit(32);
+  }
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  pbwtad *p0 = malloc(sizeof *p0);
+  p0->a = malloc(nrow * sizeof *(p0->a));
+  for (int j = 0; j < nrow; j++) {
+    p0->a[j] = j;
+  }
+  fgetcoli(fin, 0, nrow, c0, ncol);
+  pb[0] = cpbwt_0(nrow, c0, p0);
+  FREE(p0->a);
+  FREE(p0);
+  /*printf("[man] c:0 (<1..N)\n");*/
+
+  for (size_t j = 1; j < W; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
+    /*printf("[lin] c:%zu (<%zu)\n", j, j - 1);*/
+  }
+
+// This works differently from previous versions of windows.
+// here I am computing (j+w) using value in j
+#pragma omp parallel
+  {
+    FILE *fin = fopen(fpath, "r");
+    if (!fin) {
+      perror("[spr]");
+      exit(33);
+    }
+    int tid = omp_get_thread_num();
+    int nthreads = omp_get_num_threads();
+
+    int base = W / nthreads;
+    int rem = W % nthreads;
+
+    int start = tid * base + (tid < rem ? tid : rem);
+    int count = base + (tid < rem ? 1 : 0);
+
+    for (int offset = 0; offset < count; offset++) {
+      int lane = start + offset;
+
+      for (size_t j = lane; j + W < ncol; j += W) {
+        /*printf("[par:%d] c:%zu (<%zu)\n", tid, j + W, j);*/
+
+        uint64_t *pw = malloc(nrow * sizeof *pw);
+        pbwtad *ps = malloc(nrow * sizeof *ps);
+        ps->a = malloc(nrow * sizeof *(ps->a));
+        pb[j + W] = ps;
+        memcpy(ps->a, pb[j]->a, nrow * sizeof *(ps->a));
+
+        /*#pragma omp critical(fgetcol_lock)*/
+        /*        { fgetcoliwgri(fin, j + 1, nrow, pw, ncol, W); }*/
+        fgetcoliwgri(fin, j + 1, nrow, pw, ncol, W);
+        // maybe change to aux for each thread
+        rrsortx_noaux(nrow, pw, ps->a);
+
+        FREE(pw);
+      }
+    }
+  }
+
+#if 0
+  for (size_t j = 0; j < ncol; j++) {
+    DPRINT("prs %3zu: ", j);
+    if (pb[j])
+      DPARR(nrow, pb[j]->a, "%zu ");
+    else
+      DPRINT(" ---\n");
+  }
+#endif
+  FREE(c0);
+  return pb;
+}
+
 pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
@@ -1349,7 +1455,7 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
 }
 
 int main(int argc, char *argv[]) {
-  char _usage_args_[] = "[lin|bli[s]|ars|aqs|bar[s]|prs] FILE\n";
+  char _usage_args_[] = "[lin|bli[s]|ars|aqs|bar[s]|prs|bpr|spr] FILE\n";
   if (argc < 2) {
     fprintf(stderr, "Usage: %s %s FILE\n", argv[0], _usage_args_);
     return EXIT_FAILURE;
@@ -1388,6 +1494,8 @@ int main(int argc, char *argv[]) {
     r = wparc_rrs(fin, nrow, ncol);
   } else if (strcmp(argv[1], "bpr") == 0) {
     r = bwparc_rrs(fin, nrow, ncol);
+  } else if (strcmp(argv[1], "spr") == 0) {
+    r = wstagparc_rrs(argv[2], nrow, ncol);
   } else if (strcmp(argv[1], "srs") == 0) {
     r = wseq_rrs(fin, nrow, ncol);
   } else {
@@ -1406,6 +1514,11 @@ int main(int argc, char *argv[]) {
   for (size_t i = 0; i < ncol; i++) {
     fprintf(stderr, "\rTesting: %10zu/%zu", i + 1, ncol);
     if (r[i]) {
+      /*printf("  r   [%zu]: ", i);*/
+      /*parr(nrow, r[i]->a, "%zu ");*/
+      /*printf("  ctrl[%zu]: ", i);*/
+      /*parr(nrow, ctrl[i]->a, "%zu ");*/
+      /*printf("\n");*/
       for (size_t j = 0; j < nrow; j++) {
         assert(r[i]->a[j] == ctrl[i]->a[j]);
       }
