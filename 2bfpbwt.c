@@ -24,8 +24,8 @@
 
 #define parr(n, a, fmt)                                                        \
   do {                                                                         \
-    for (int i = 0; i < (n); i++) {                                            \
-      printf((fmt), (a)[i]);                                                   \
+    for (int parr_i__ = 0; parr_i__ < (n); parr_i__++) {                       \
+      printf((fmt), (a)[parr_i__]);                                            \
     }                                                                          \
     puts("");                                                                  \
   } while (0)
@@ -693,8 +693,8 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
 
 #define DPARR(n, a, fmt)                                                       \
   do {                                                                         \
-    for (int i = 0; i < (n); i++) {                                            \
-      fprintf(stderr, (fmt), (a)[i]);                                          \
+    for (int parr_i__ = 0; parr_i__ < (n); parr_i__++) {                       \
+      fprintf(stderr, (fmt), (a)[parr_i__]);                                   \
     }                                                                          \
     fputc(0xA, stderr);                                                        \
   } while (0)
@@ -1371,8 +1371,6 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "bli") == 0) {
     r = blinc(fin, nrow, ncol);
   } else if (strcmp(argv[1], "blis") == 0) {
-    /*fclose(fin);*/
-    /*fin = NULL;*/
     int fd = open(argv[2], O_RDONLY);
     r = sblinc(fd, nrow, ncol);
   } else if (strcmp(argv[1], "ars") == 0) {
