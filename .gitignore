@@ -8,3 +8,7 @@
 bf-pbwt
 2bfpbwt
 pgen
+
+work/
+nextflow
+.nextflow*
