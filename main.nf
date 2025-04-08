@@ -1,4 +1,4 @@
-params.exe = "/Users/msgro/Progetti/bf-pbwt/2bfpbwt"
+params.exe = "$projectDir/2bfpbwt"
 params.output = ""
 params.input = ""
 
