@@ -4,6 +4,7 @@ params.input = ""
 
 process BFPBWT{
     storeDir "$params.output"
+    maxCpus 32
 
     input:
     tuple path(input), val(type)
@@ -12,10 +13,12 @@ process BFPBWT{
     tuple path(time), path(out)
 
     script:
+
     time = "${input}.${type}.time.txt"
     out = "${input}.${type}.out.txt"
     """
     #!/usr/bin/env bash
+    export OMP_NUM_THREADS=${task.cpus}
 
     ${params.time_exe} -o ${time} ${params.exe} $type $input 2> ${out}
     """
