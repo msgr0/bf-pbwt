@@ -4,7 +4,7 @@ params.input = ""
 
 process BFPBWT{
     storeDir "$params.output"
-    maxCpus 32
+    cpus 32
 
     input:
     tuple path(input), val(type)
