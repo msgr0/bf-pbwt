@@ -10,6 +10,20 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+// NOTE: this requires huge pages to be reserved *before* running the tool.
+// This program cannot itself reserve huge pages and, on some systems,
+// this action requires special privileges;
+// hence the presence of the following macro as this feature must be
+// intentionally activated and setup beforehand
+//
+/*#define __USE_MAP_HUGETLB*/
+
+#if defined(MAP_HUGETLB) && defined(__USE_MAP_HUGETLB)
+#define __MMAP_FLAGS (MAP_PRIVATE | MAP_HUGETLB)
+#else
+#define __MMAP_FLAGS (MAP_PRIVATE)
+#endif
+
 #define FREE(x)                                                                \
   do {                                                                         \
     free((x));                                                                 \
@@ -173,7 +187,7 @@ static inline void mbfgetcoln(int fd, size_t n, uint8_t *restrict c,
       perror("fstat");
       exit(EXIT_FAILURE);
     }
-    fdmm = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    fdmm = mmap(NULL, st.st_size, PROT_READ, __MMAP_FLAGS, fd, 0);
     if (fdmm == MAP_FAILED) {
       perror("mmap");
       exit(EXIT_FAILURE);
@@ -321,7 +335,7 @@ static inline void mbfgetcoln(int fd, size_t n, uint8_t *restrict c,
         perror("fstat");                                                       \
         exit(EXIT_FAILURE);                                                    \
       }                                                                        \
-      fdmm = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);            \
+      fdmm = mmap(NULL, st.st_size, PROT_READ, __MMAP_FLAGS, fd, 0);           \
       if (fdmm == MAP_FAILED) {                                                \
         perror("mmap");                                                        \
         exit(EXIT_FAILURE);                                                    \
