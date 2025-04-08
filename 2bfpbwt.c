@@ -234,18 +234,18 @@ static inline void sbfgetcoln(int fd, size_t n, uint8_t *restrict c,
     static uint64_t *buf = NULL;                                               \
     if (!buf)                                                                  \
       buf = malloc(BFGETCOLWR_BUF_SIZE * n * sizeof *buf);                     \
-    char rbuf[64];                                                             \
+    char rbuf[64 * BFGETCOLWR_BUF_SIZE];                                       \
                                                                                \
     if (bufn == BFGETCOLWR_BUF_SIZE) {                                         \
       uint64_t x;                                                              \
       size_t offset;                                                           \
       offset = i * W;                                                          \
       for (size_t r = 0; r < n; r++) {                                         \
+        pread(fd, &rbuf, 64 * BFGETCOLWR_BUF_SIZE, offset);                    \
         for (size_t s = 0; s < BFGETCOLWR_BUF_SIZE; s++) {                     \
           buf[(n * s) + r] = 0;                                                \
-          pread(fd, &rbuf, W, offset + W * s);                                 \
           for (size_t j = 0; j < W; j++) {                                     \
-            x = rbuf[j] - 48;                                                  \
+            x = rbuf[W * s + j] - 48;                                          \
             buf[(n * s) + r] |= (x << j);                                      \
           }                                                                    \
         }                                                                      \
@@ -534,7 +534,7 @@ static void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
   static uint64_t *buf = NULL;
   if (!buf)
     buf = malloc(BFGETCOLWR_BUF_SIZE * n * sizeof *buf);
-  char rbuf[64];
+  char rbuf[64 * BFGETCOLWR_BUF_SIZE];
 
   if (bufn == BFGETCOLWR_BUF_SIZE) {
     uint64_t x;
@@ -542,17 +542,17 @@ static void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
     /*lseek(fd, i * w, SEEK_SET);*/
     offset = i * w;
     for (size_t r = 0; r < n; r++) {
+      pread(fd, &rbuf, 64 * BFGETCOLWR_BUF_SIZE, offset);
       for (size_t s = 0; s < BFGETCOLWR_BUF_SIZE; s++) {
         buf[(n * s) + r] = 0;
-        pread(fd, &rbuf, w, offset + w * s);
+        /*pread(fd, &rbuf, w, offset + w * s);*/
         for (size_t j = 0; j < w; j++) {
-          x = rbuf[j] - 48;
+          x = rbuf[w * s + j] - 48;
           buf[(n * s) + r] = (x << j) | buf[(n * s) + r];
         }
       }
       c[r] = buf[r];
       offset += nc + 1;
-      lseek(fd, nc - (BFGETCOLWR_BUF_SIZE * w) + 1, SEEK_CUR);
     }
     bufn = 1;
   } else {
