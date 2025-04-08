@@ -263,15 +263,18 @@ static inline void mbfgetcoln(int fd, size_t n, uint8_t *restrict c,
     static uint64_t *buf = NULL;                                               \
     if (!buf)                                                                  \
       buf = malloc(BFGETCOLWR_BUF_SIZE * n * sizeof *buf);                     \
+    char rbuf[64 * BFGETCOLWR_BUF_SIZE];                                       \
+                                                                               \
     if (bufn == BFGETCOLWR_BUF_SIZE) {                                         \
       uint64_t x;                                                              \
       fseek(fd, i *W, SEEK_SET);                                               \
       for (size_t r = 0; r < n; r++) {                                         \
+        fread(&rbuf, 1, 64 * BFGETCOLWR_BUF_SIZE, fd);                         \
         for (size_t s = 0; s < BFGETCOLWR_BUF_SIZE; s++) {                     \
           buf[(n * s) + r] = 0;                                                \
           for (size_t j = 0; j < W; j++) {                                     \
-            x = fgetc(fd) - 48;                                                \
-            buf[(n * s) + r] = (x << j) | buf[(n * s) + r];                    \
+            x = rbuf[W * s + j] - 48;                                          \
+            buf[(n * s) + r] |= (x << j);                    \
           }                                                                    \
         }                                                                      \
         c[r] = buf[r];                                                         \
@@ -605,15 +608,18 @@ static void bfgetcolwgrn(FILE *fd, size_t n, uint64_t *restrict c, size_t nc,
   static uint64_t *buf = NULL;
   if (!buf)
     buf = malloc(BFGETCOLWR_BUF_SIZE * n * sizeof *buf);
+  char rbuf[64 * BFGETCOLWR_BUF_SIZE];
 
   if (bufn == BFGETCOLWR_BUF_SIZE) {
     uint64_t x;
     fseek(fd, i * w, SEEK_SET);
     for (size_t r = 0; r < n; r++) {
+      fread(&rbuf, 1, 64 * BFGETCOLWR_BUF_SIZE, fd);
       for (size_t s = 0; s < BFGETCOLWR_BUF_SIZE; s++) {
         buf[(n * s) + r] = 0;
         for (size_t j = 0; j < w; j++) {
-          x = fgetc(fd) - 48;
+          /*x = fgetc(fd) - 48;*/
+          x = rbuf[w * s + j] - 48;
           buf[(n * s) + r] = (x << j) | buf[(n * s) + r];
         }
       }
