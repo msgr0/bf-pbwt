@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <float.h>
 #include <string.h>
+#include <stdint.h>
 
 //#include <stdalign.h>
 
