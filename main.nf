@@ -1,8 +1,6 @@
 params.exe = "/Users/msgro/Progetti/bf-pbwt/2bfpbwt"
 params.output = ""
 params.input = ""
-params.time_exe_osx = "/usr/bin/time -al"
-params.time_exe_gnu = "/usr/bin/time -v"
 
 process BFPBWT{
     storeDir "$params.output"
@@ -19,7 +17,7 @@ process BFPBWT{
     """
     #!/usr/bin/env bash
 
-    ${params.time_exe_osx} -o ${time} ${params.exe} $type $input 2> ${out}
+    ${params.time_exe} -o ${time} ${params.exe} $type $input 2> ${out}
     """
 }
 
