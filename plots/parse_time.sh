@@ -43,17 +43,26 @@ for file in "$FOLDER"/*.time.txt; do
       echo "${name}\t${tool_name}\t${timing}\t${memory}"
       ;;
 
-    gnu)
+    gnu)# Extract timing using sed
+      timing=$(grep -i "Elapsed" "$file" | sed -E 's/.*time \(.*\): ([0-9]+:[0-9]+(\.[0-9]+|:[0-9]+)).*/\1/')
 
-      timing=$(grep -i "Elapsed" "$file" | sed -E 's/.*\b([0-9]{1,2}:[0-9]{2}\.[0-9]{2})\b.*/\1/')
+      # Check if the extracted timing is in mm:ss.ss or hh:mm:ss format
+      if [[ "$timing" == *.* ]]; then
+        # Case: mm:ss.ss format
+        minutes=$(echo "$timing" | sed -E 's/:.*//') # Extract minutes
+        seconds=$(echo "$timing" | sed -E 's/^[0-9]+://') # Extract seconds
+        total_seconds=$(echo "$minutes * 60 + $seconds" | bc) # Calculate total seconds
+      else
+        # Case: hh:mm:ss format
+        hours=$(echo "$timing" | sed -E 's/:.*//') # Extract hours
+        minutes=$(echo "$timing" | sed -E 's/^[0-9]+:([0-9]+):.*/\1/') # Extract minutes
+        seconds=$(echo "$timing" | sed -E 's/^.*://') # Extract seconds
+        total_seconds=$(echo "$hours * 3600 + $minutes * 60 + $seconds" | bc) # Calculate total seconds
+      fi
 
-      # Convert mm:ss.ss to ss.ss format
-      minutes=$(echo "$timing" | sed -E 's/:.*//') # Extract minutes
-      seconds=$(echo "$timing" | sed -E 's/^[0-9]+://') # Extract seconds
-      total_seconds=$(echo "$minutes * 60 + $seconds" | bc) # Calculate total seconds
 
       memory=$(grep -i "Maximum resident" "$file" | sed -E 's/.* ([0-9]+)$/\1/') 
-      echo "${name}\t${tool_name}\t${timing}\t${memory}"
+      echo "${name}\t${tool_name}\t${total_seconds}\t${memory}"
       ;;
 
     *)
