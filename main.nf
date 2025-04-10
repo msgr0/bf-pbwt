@@ -10,18 +10,20 @@ process BFPBWT{
     tuple path(input), val(type)
 
     output:
-    tuple path(time), path(out)
+    path(time), emit: time
+    // path(out_data), emit: out_data
 
     script:
 
     time = "${input}.${type}.time.txt"
-    out = "${input}.${type}.out.txt"
+    // out = "${input}.${type}.out.txt"
     """
     #!/usr/bin/env bash
     export OMP_NUM_THREADS=${task.cpus}
 
-    ${params.time_exe} -o ${time} ${params.exe} $type $input 2> ${out}
+    ${params.time_exe} -o ${time} ${params.exe} $type $input
     """
+    //  2> ${out}
 }
 
 workflow {
@@ -33,7 +35,5 @@ workflow {
     input_ch = input_ch.combine(runtype_ch)
 
     BFPBWT(input_ch) | view
-
-
 
 }
