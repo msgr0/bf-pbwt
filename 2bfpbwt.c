@@ -24,6 +24,10 @@
 #define __MMAP_FLAGS (MAP_PRIVATE)
 #endif
 
+#define BFGETCOLI_BUF_SIZE 128
+#define BFGETCOLWR_BUF_SIZE 2
+#define W 64
+
 #define FREE(x)                                                                \
   do {                                                                         \
     free((x));                                                                 \
@@ -88,7 +92,6 @@ static inline void bfgetcoln(FILE *fd, size_t n, uint8_t *restrict c,
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
 
-#define BFGETCOLI_BUF_SIZE 128
   static char rbuf[BFGETCOLI_BUF_SIZE];
   static size_t i = 0;
   static size_t bufn = BFGETCOLI_BUF_SIZE;
@@ -142,7 +145,6 @@ static inline void sbfgetcoln(int fd, size_t n, uint8_t *restrict c,
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
 
-#define BFGETCOLI_BUF_SIZE 128
   static char rbuf[BFGETCOLI_BUF_SIZE];
   static size_t i = 0;
   static size_t bufn = BFGETCOLI_BUF_SIZE;
@@ -172,7 +174,6 @@ static inline void mbfgetcoln(int fd, size_t n, uint8_t *restrict c,
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
 
-#define BFGETCOLI_BUF_SIZE 128
   static char rbuf[BFGETCOLI_BUF_SIZE];
   static size_t i = 0;
   static size_t bufn = BFGETCOLI_BUF_SIZE;
@@ -274,7 +275,7 @@ static inline void mbfgetcoln(int fd, size_t n, uint8_t *restrict c,
           buf[(n * s) + r] = 0;                                                \
           for (size_t j = 0; j < W; j++) {                                     \
             x = rbuf[W * s + j] - 48;                                          \
-            buf[(n * s) + r] |= (x << j);                    \
+            buf[(n * s) + r] |= (x << j);                                      \
           }                                                                    \
         }                                                                      \
         c[r] = buf[r];                                                         \
@@ -370,7 +371,6 @@ static inline void mbfgetcoln(int fd, size_t n, uint8_t *restrict c,
     i++;                                                                       \
   }
 
-#define BFGETCOLWR_BUF_SIZE 2
 FGETCOLIW_DECLARE(8)
 FGETCOLIW_DECLARE(16)
 FGETCOLIW_DECLARE(32)
@@ -1066,7 +1066,6 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
 
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
@@ -1128,7 +1127,6 @@ pbwtad **wbapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
 
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
@@ -1189,7 +1187,6 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol,
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
 
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
@@ -1251,7 +1248,6 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol,
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
 
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
@@ -1321,7 +1317,6 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
 
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
@@ -1394,7 +1389,6 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
 
   // first W=(64 for now), must be computed linearly
   // TODO: ask if true
@@ -1474,7 +1468,6 @@ pbwtad **bwparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
 
   // first W=(64 for now), must be computed linearly
   // TODO: ask if true
@@ -1556,7 +1549,6 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
 
   // first W must be computed linearly
 
@@ -1641,7 +1633,6 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-#define W 64
 
   // first W=(64 for now), must be computed linearly
   // TODO: ask if true
