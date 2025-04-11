@@ -734,50 +734,79 @@ pbwtad *cpbwt_0(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   // and re-use them each time.
   size_t *z = malloc(n * sizeof *z);
   size_t *o = malloc(n * sizeof *o);
+  size_t *zd = malloc(n * sizeof *zd);
+  size_t *od = malloc(n * sizeof *od);
 
   pbwtad *ret = malloc(sizeof *ret);
   size_t *a = malloc(n * sizeof *a);
+  size_t *d = malloc(n * sizeof *d);
 
   if (!z || !o || !a) {
     // FIXME: error
     return NULL;
   }
   size_t r = 0, q = 0;
+  size_t f = n, g = n;
 
   size_t i;
   for (i = 0; i < n; i++) {
+
+    if (c[p->d[i]] > f) {
+      f = c[p->d[i]];
+    }
+    if (c[p->d[i]] > g) {
+      g = c[p->d[i]];
+    }
+
     if (c[p->a[i]] == 1) {
-      o[q++] = p->a[i];
+      o[q] = p->a[i];
+      od[q++] = g = 0;
+      g = 0;
     } else {
-      z[r++] = p->a[i];
+      z[r] = p->a[i];
+      zd[r++] = f;
+      f = 0;
     }
   }
 
   assert(r + q == n);
   for (i = 0; i < r; i++) {
     a[i] = z[i];
+    d[i] = zd[i];
   }
   for (i = 0; i < q; i++) {
     a[r + i] = o[i];
+    d[r + i] = od[i];
   }
 
   FREE(o);
   FREE(z);
+  FREE(zd);
+  FREE(od);
 
   ret->a = a;
+  ret->d = d;
   return ret;
 }
 
 static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
                      size_t *_o, size_t *_z) {
   static size_t *o = NULL;
-  if (!o)
+  static size_t *h = NULL;
+  static size_t k = 1;
+
+  if (!o) {
     o = malloc(n * sizeof *o);
+    h = malloc(n * sizeof *h);
+  }
 
   pbwtad *ret = malloc(sizeof *ret);
   ret->a = malloc(n * sizeof *(ret->a));
+  ret->d = malloc(n * sizeof *(ret->d));
 
   size_t r = 0, q = 0;
+  size_t f = k, g = k;
+
   size_t i;
 
 #if 0
@@ -793,9 +822,21 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
 #else
   for (i = 0; i < n; i++) {
     size_t idx = p->a[i];
+    size_t ddx = p->d[i];
+
+    f = (ddx > f) ? ddx : f;
+    g = (ddx > g) ? ddx : g;
+
     size_t mask = c[idx]; // 1 if true, 0 if false
     o[q] = idx;
     ret->a[r] = idx;
+    if (mask) {
+      h[q] = g;
+      g = 0;
+    } else {
+      ret->d[r] = f;
+      f = 0;
+    }
     q += mask;     // Increment q if mask is 1
     r += mask ^ 1; // Increment r if mask is 0
   }
@@ -810,8 +851,10 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
   }
 #else
   memcpy(ret->a + r, o, q * sizeof(size_t));
+  memcpy(ret->d + r, h, q * sizeof(size_t));
 #endif
 
+  k++;
   return ret;
 }
 
@@ -839,6 +882,10 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   size_t *o = malloc(nrow * sizeof *o);
   size_t *z = malloc(nrow * sizeof *z);
+
+  size_t *od = malloc(nrow * sizeof *od);
+  size_t *zd = malloc(nrow * sizeof *zd);
+
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
@@ -847,12 +894,15 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
 
   pbwtad *p0 = malloc(sizeof *p0);
   p0->a = malloc(nrow * sizeof *(p0->a));
+  p0->d = malloc(nrow * sizeof *(p0->d));
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
+    p0->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
   pl[0] = cpbwt(nrow, c0, p0, z, o);
   FREE(p0->a);
+  FREE(p0->d);
   FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
@@ -867,11 +917,14 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
     /*DPRINT("lin %3zu: ", j);*/
     DPRINT("%3zu: ", j);
     DPARR(nrow, pl[j]->a, "%zu ");
+    DPARR(nrow, pl[j]->d, "%zu ");
   }
 #endif
   FREE(c0);
   FREE(o);
   FREE(z);
+  FREE(od);
+  FREE(zd);
   return pl;
 }
 pbwtad **blinc(FILE *fin, size_t nrow, size_t ncol) {
