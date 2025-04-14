@@ -795,10 +795,10 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
   static size_t *h = NULL;
   static size_t k = 1;
 
-  if (!o) {
+  if (!o)
     o = malloc(n * sizeof *o);
+  if (!h)
     h = malloc(n * sizeof *h);
-  }
 
   pbwtad *ret = malloc(sizeof *ret);
   ret->a = malloc(n * sizeof *(ret->a));
@@ -808,7 +808,6 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
   size_t f = k, g = k;
 
   size_t i;
-
 #if 0
   for (i = 0; i < n; i++) {
     /*printf("i: %6zu - p->a[i]: %zu\n", i, p->a[i]);*/
@@ -827,9 +826,10 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
     f = (ddx > f) ? ddx : f;
     g = (ddx > g) ? ddx : g;
 
-    size_t mask = c[idx]; // 1 if true, 0 if false
+    size_t mask = c[idx];
     o[q] = idx;
     ret->a[r] = idx;
+#if 0
     if (mask) {
       h[q] = g;
       g = 0;
