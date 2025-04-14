@@ -789,8 +789,7 @@ pbwtad *cpbwt_0(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   return ret;
 }
 
-static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
-                     size_t *_o, size_t *_z) {
+static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   static size_t *o = NULL;
   static size_t *h = NULL;
   static size_t k = 1;
@@ -841,17 +840,8 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
     h[q] = g;
     ret->d[r] = f;
 
-    if (mask) {
-      g = 0;
-    } else {
-      f = 0;
-    }
-
-    /*f *= mask;     // f = 0 if mask == 0, unchanged if mask == 1*/
-    /*g *= 1 - mask; // g = 0 if mask == 1, unchanged if mask == 0*/
-
-    /*g = mask ? 0 : g;*/
-    /*f = mask ? f : 0;*/
+    f &= -mask;       // f = 0 if mask == 0, unchanged if mask == 1
+    g &= -(1 - mask); // g = 0 if mask == 1, unchanged if mask == 0
 #endif
     q += mask;     // Increment q if mask is 1
     r += mask ^ 1; // Increment r if mask is 0
@@ -862,6 +852,64 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
   memcpy(ret->d + r, h, q * sizeof(size_t));
 
   k++;
+  return ret;
+}
+
+static pbwtad *cpbwtk(size_t n, uint8_t *restrict c, pbwtad *restrict p,
+                      size_t k) {
+  static size_t *o = NULL;
+  static size_t *h = NULL;
+
+  if (!o)
+    o = malloc(n * sizeof *o);
+  if (!h)
+    h = malloc(n * sizeof *h);
+
+  pbwtad *ret = malloc(sizeof *ret);
+  ret->a = malloc(n * sizeof *(ret->a));
+  ret->d = malloc(n * sizeof *(ret->d));
+
+  size_t r = 0, q = 0;
+  size_t f = k, g = k;
+
+  size_t i;
+#if 0
+  for (i = 0; i < n; i++) {
+    /*printf("i: %6zu - p->a[i]: %zu\n", i, p->a[i]);*/
+    if (c[p->a[i]] == 1) {
+      o[q++] = p->a[i];
+    } else {
+      ret->a[r++] = p->a[i];
+      /*z[r++] = p->a[i];*/
+    }
+  }
+#else
+  for (i = 0; i < n; i++) {
+    size_t idx = p->a[i];
+    size_t ddx = p->d[i];
+
+    f = (ddx > f) ? ddx : f;
+    g = (ddx > g) ? ddx : g;
+
+    size_t mask = c[idx];
+    o[q] = idx;
+    ret->a[r] = idx;
+
+    if (mask) {
+      h[q] = g;
+      g = 0;
+    } else {
+      ret->d[r] = f;
+      f = 0;
+    }
+    q += mask;     // Increment q if mask is 1
+    r += mask ^ 1; // Increment r if mask is 0
+  }
+#endif
+
+  memcpy(ret->a + r, o, q * sizeof(size_t));
+  memcpy(ret->d + r, h, q * sizeof(size_t));
+
   return ret;
 }
 
@@ -890,9 +938,6 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
   size_t *o = malloc(nrow * sizeof *o);
   size_t *z = malloc(nrow * sizeof *z);
 
-  size_t *od = malloc(nrow * sizeof *od);
-  size_t *zd = malloc(nrow * sizeof *zd);
-
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
@@ -907,7 +952,7 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
     p0->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
-  pl[0] = cpbwt(nrow, c0, p0, z, o);
+  pl[0] = cpbwtk(nrow, c0, p0, 1);
   FREE(p0->a);
   FREE(p0->d);
   FREE(p0);
@@ -915,7 +960,7 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
   for (size_t j = 1; j < ncol; j++) {
     /*fprintf(stderr, "\r%10zu/%zu", j + 1, ncol);*/
     fgetcoli(fin, j, nrow, c0, ncol);
-    pl[j] = cpbwt(nrow, c0, pl[j - 1], z, o);
+    pl[j] = cpbwtk(nrow, c0, pl[j - 1], j + 1);
   }
   fputc(0xA, stderr);
 
@@ -930,14 +975,10 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
   FREE(c0);
   FREE(o);
   FREE(z);
-  FREE(od);
-  FREE(zd);
   return pl;
 }
 pbwtad **blinc(FILE *fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  size_t *o = malloc(nrow * sizeof *o);
-  size_t *z = malloc(nrow * sizeof *z);
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
@@ -951,7 +992,7 @@ pbwtad **blinc(FILE *fin, size_t nrow, size_t ncol) {
   }
   bfgetcoln(fin, nrow, c0, ncol);
   /*parr(nrow, c0, "%d ");*/
-  pl[0] = cpbwt(nrow, c0, p0, z, o);
+  pl[0] = cpbwt(nrow, c0, p0);
   FREE(p0->a);
   FREE(p0);
   /*for (size_t i = 0; i < nrow; i++) {*/
@@ -971,7 +1012,7 @@ pbwtad **blinc(FILE *fin, size_t nrow, size_t ncol) {
     /*    exit(122);*/
     /*  }*/
     /*}*/
-    pl[j] = cpbwt(nrow, c0, pl[j - 1], z, o);
+    pl[j] = cpbwt(nrow, c0, pl[j - 1]);
   }
   fputc(0xA, stderr);
 
@@ -983,14 +1024,10 @@ pbwtad **blinc(FILE *fin, size_t nrow, size_t ncol) {
   }
 #endif
   FREE(c0);
-  FREE(o);
-  FREE(z);
   return pl;
 }
 pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  size_t *o = malloc(nrow * sizeof *o);
-  size_t *z = malloc(nrow * sizeof *z);
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
@@ -1005,14 +1042,14 @@ pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
     p0->d[j] = 0;
   }
   sbfgetcoln(fin, nrow, c0, ncol);
-  pl[0] = cpbwt(nrow, c0, p0, z, o);
+  pl[0] = cpbwt(nrow, c0, p0);
   FREE(p0->a);
   FREE(p0->d);
   FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
     sbfgetcoln(fin, nrow, c0, ncol);
-    pl[j] = cpbwt(nrow, c0, pl[j - 1], z, o);
+    pl[j] = cpbwt(nrow, c0, pl[j - 1]);
   }
   fputc(0xA, stdout);
 
@@ -1026,15 +1063,11 @@ pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
   DPRINT("\n");
 #endif
   FREE(c0);
-  FREE(o);
-  FREE(z);
   return pl;
 }
 
 pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  size_t *o = malloc(nrow * sizeof *o);
-  size_t *z = malloc(nrow * sizeof *z);
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
@@ -1047,13 +1080,13 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
     p0->a[j] = j;
   }
   mbfgetcoln(fin, nrow, c0, ncol);
-  pl[0] = cpbwt(nrow, c0, p0, z, o);
+  pl[0] = cpbwt(nrow, c0, p0);
   FREE(p0->a);
   FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
     mbfgetcoln(fin, nrow, c0, ncol);
-    pl[j] = cpbwt(nrow, c0, pl[j - 1], z, o);
+    pl[j] = cpbwt(nrow, c0, pl[j - 1]);
   }
   fputc(0xA, stdout);
 
@@ -1066,8 +1099,6 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
   DPRINT("\n");
 #endif
   FREE(c0);
-  FREE(o);
-  FREE(z);
   return pl;
 }
 
@@ -1780,7 +1811,7 @@ int main(int argc, char *argv[]) {
 /*#define DTEST_VLIN*/
 #ifdef DTEST_VLIN
   fprintf(stderr, "\e[0;33mWARNING: this will take a while.\e[0m\n");
-  pbwtad **ctrl = blinc(fin, nrow, ncol);
+  pbwtad **ctrl = linc(fin, nrow, ncol);
   if (r == NULL || ctrl == NULL) {
     fprintf(stderr, "\e[0;31mERROR: something went wrong.\e[0m\n");
     exit(5);
@@ -1796,6 +1827,14 @@ int main(int argc, char *argv[]) {
       /*printf("\n");*/
       for (size_t j = 0; j < nrow; j++) {
         assert(r[i]->a[j] == ctrl[i]->a[j]);
+      }
+      /*printf("  r   [%zu]: ", i);*/
+      /*parr(nrow, r[i]->d, "%zu ");*/
+      /*printf("  ctrl[%zu]: ", i);*/
+      /*parr(nrow, ctrl[i]->d, "%zu ");*/
+      /*printf("\n");*/
+      for (size_t j = 0; j < nrow; j++) {
+        assert(r[i]->d[j] == ctrl[i]->d[j]);
       }
       ctrltot++;
     }
