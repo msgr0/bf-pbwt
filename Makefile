@@ -32,3 +32,21 @@ clean:
 	-rm *.o $(ALL)
 
 
+SHELL:=/bin/bash
+PANEL?=panel.r5k.c50k.txt
+LOOPS?=10
+MODES?=bar bli blim
+loop-%: 2bfpbwt
+	@tmpfile=$$(mktemp); \
+	for ((i=1; i <= ${LOOPS}; ++i)) do \
+		echo -e "[$*] running $$i" >&2; \
+		\time -al ./$^ $* ${PANEL} 2>&1 \
+			| grep "real" | tr -s ' ' | cut -f2 -d' ' >> $$tmpfile ;\
+	done; \
+	sum=$$(paste -sd+ $$tmpfile | bc); \
+	avg=$$(echo "scale=4; $$sum / ${LOOPS}" | bc); \
+	echo "[$*] avg_time: $$avg s"; \
+
+loop: $(foreach m,$(MODES),loop-$(m))
+
+.PHONY: loop

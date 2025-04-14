@@ -837,22 +837,29 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p,
       ret->d[r] = f;
       f = 0;
     }
+#else
+    h[q] = g;
+    ret->d[r] = f;
+
+    if (mask) {
+      g = 0;
+    } else {
+      f = 0;
+    }
+
+    /*f *= mask;     // f = 0 if mask == 0, unchanged if mask == 1*/
+    /*g *= 1 - mask; // g = 0 if mask == 1, unchanged if mask == 0*/
+
+    /*g = mask ? 0 : g;*/
+    /*f = mask ? f : 0;*/
+#endif
     q += mask;     // Increment q if mask is 1
     r += mask ^ 1; // Increment r if mask is 0
   }
 #endif
 
-#if 0
-  /*for (i = 0; i < r; i++) {*/
-  /*  ret->a[i] = z[i];*/
-  /*}*/
-  for (i = 0; i < q; i++) {
-    ret->a[r + i] = o[i];
-  }
-#else
   memcpy(ret->a + r, o, q * sizeof(size_t));
   memcpy(ret->d + r, h, q * sizeof(size_t));
-#endif
 
   k++;
   return ret;
@@ -992,12 +999,15 @@ pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
 
   pbwtad *p0 = malloc(sizeof *p0);
   p0->a = malloc(nrow * sizeof *(p0->a));
+  p0->d = malloc(nrow * sizeof *(p0->d));
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
+    p0->d[j] = 0;
   }
   sbfgetcoln(fin, nrow, c0, ncol);
   pl[0] = cpbwt(nrow, c0, p0, z, o);
   FREE(p0->a);
+  FREE(p0->d);
   FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
@@ -1011,6 +1021,7 @@ pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
     /*DPRINT("bli %3zu(%p): ", j, pl[j]);*/
     DPRINT("%3zu(%p): ", j, pl[j]->a);
     DPARR(nrow, pl[j]->a, "%zu ");
+    DPARR(nrow, pl[j]->d, "%zu ");
   }
   DPRINT("\n");
 #endif
