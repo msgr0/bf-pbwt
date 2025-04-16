@@ -723,11 +723,27 @@ struct pbwtad {
   size_t *d;
 };
 
+static inline pbwtad *pbwtad_new(size_t n) {
+  pbwtad *p = malloc(sizeof *p);
+  p->a = malloc(n * sizeof *(p->a));
+  p->d = malloc(n * sizeof *(p->d));
+  // NOTE: maybe we want to have a look at continuos array for both a and d and
+  // allocate as follows, in which case the struct might be changed a bit:
+  // pbwtad *p = malloc(sizeof *p + 2*n * sizeof *(p->data));
+  return p;
+}
+
+#define PBWTAD_FREE(p)                                                         \
+  do {                                                                         \
+    FREE((p)->a);                                                              \
+    FREE((p)->d);                                                              \
+    FREE(p);                                                                   \
+  } while (0)
+
 // msgr0's version
 // c[n] is a pointer to the column
 // p is the `pbwtad` of A and D arrays of the previous column
 // return: `pbwtad` of the current column
-// TODO: try with using external o and z arrays
 pbwtad *cpbwt_0(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   // NOTE: these two arrays do not need be allocated and free'd each time.
   // it would be possible to allocate it once (per process)
@@ -985,33 +1001,17 @@ pbwtad **blinc(FILE *fin, size_t nrow, size_t ncol) {
   if (!pl)
     return NULL;
 
-  pbwtad *p0 = malloc(sizeof *p0);
-  p0->a = malloc(nrow * sizeof *(p0->a));
+  pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
+    p0->d[j] = 0;
   }
   bfgetcoln(fin, nrow, c0, ncol);
-  /*parr(nrow, c0, "%d ");*/
   pl[0] = cpbwt(nrow, c0, p0);
-  FREE(p0->a);
-  FREE(p0);
-  /*for (size_t i = 0; i < nrow; i++) {*/
-  /*  if (c0[i] != 0 && c0[i] != 1) {*/
-  /*    printf("c[%zu]=%hhu\n", i, c0[i]);*/
-  /*    exit(122);*/
-  /*  }*/
-  /*}*/
+  PBWTAD_FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
-    /*fprintf(stderr, "\r%10zu/%zu", j + 1, ncol);*/
-    /*fprintf(stderr, "\r%10zu/%zu\n", j + 1, ncol);*/
     bfgetcoln(fin, nrow, c0, ncol);
-    /*for (size_t i = 0; i < nrow; i++) {*/
-    /*  if (c0[i] != 0 && c0[i] != 1) {*/
-    /*    printf("c0[%zu]=%hhu\n", i, c0[i]);*/
-    /*    exit(122);*/
-    /*  }*/
-    /*}*/
     pl[j] = cpbwt(nrow, c0, pl[j - 1]);
   }
   fputc(0xA, stderr);
@@ -1021,6 +1021,7 @@ pbwtad **blinc(FILE *fin, size_t nrow, size_t ncol) {
     /*DPRINT("bli %3zu: ", j);*/
     DPRINT("%3zu: ", j);
     DPARR(nrow, pl[j]->a, "%zu ");
+    DPARR(nrow, pl[j]->d, "%zu ");
   }
 #endif
   FREE(c0);
@@ -1034,18 +1035,14 @@ pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
   if (!pl)
     return NULL;
 
-  pbwtad *p0 = malloc(sizeof *p0);
-  p0->a = malloc(nrow * sizeof *(p0->a));
-  p0->d = malloc(nrow * sizeof *(p0->d));
+  pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
     p0->d[j] = 0;
   }
   sbfgetcoln(fin, nrow, c0, ncol);
   pl[0] = cpbwt(nrow, c0, p0);
-  FREE(p0->a);
-  FREE(p0->d);
-  FREE(p0);
+  PBWTAD_FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
     sbfgetcoln(fin, nrow, c0, ncol);
@@ -1074,15 +1071,14 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
   if (!pl)
     return NULL;
 
-  pbwtad *p0 = malloc(sizeof *p0);
-  p0->a = malloc(nrow * sizeof *(p0->a));
+  pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
+    p0->d[j] = 0;
   }
   mbfgetcoln(fin, nrow, c0, ncol);
   pl[0] = cpbwt(nrow, c0, p0);
-  FREE(p0->a);
-  FREE(p0);
+  PBWTAD_FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
     mbfgetcoln(fin, nrow, c0, ncol);
@@ -1113,8 +1109,8 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
   uint64_t *pw = malloc(nrow * sizeof *pw);
   size_t *aux = malloc(nrow * sizeof *aux);
 
-  pbwtad *ps = malloc(nrow * sizeof *ps);
-  ps->a = malloc(nrow * sizeof *(ps->a));
+  pbwtad *ps = pbwtad_new(nrow);
+  /*ps->a = malloc(nrow * sizeof *(ps->a));*/
   pb[W - 1] = ps;
   fgetcoliw64r(fin, 0, nrow, pw, ncol);
   rrsort0(nrow, pw, ps->a, aux);
@@ -1122,8 +1118,9 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
     /*fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);*/
-    pbwtad *ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
+    pbwtad *ps = pbwtad_new(nrow);
+    /*pbwtad *ps = malloc(nrow * sizeof *ps);*/
+    /*ps->a = malloc(nrow * sizeof *(ps->a));*/
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
     fgetcoliw64r(fin, j, nrow, pw, ncol);
@@ -1847,8 +1844,7 @@ int main(int argc, char *argv[]) {
   if (r != NULL) {
     for (size_t i = 0; i < ncol; i++) {
       if (r[i]) {
-        FREE(r[i]->a);
-        FREE(r[i]);
+        PBWTAD_FREE(r[i]);
       }
     }
     FREE(r);
