@@ -7,7 +7,9 @@
 # executables
 bf-pbwt
 2bfpbwt
+2bfpbwt-bm
 pgen
+gen
 
 work/
 nextflow

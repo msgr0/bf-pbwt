@@ -2,7 +2,8 @@ CC?=cc
 CFLAGS?=-O3
 
 VPATH=lib/quadsort
-ALL=2bfpbwt gen
+ALL=2bfpbwt-bm gen
+ALL+=2bfpbwt # NOTE: this will be removed
 LIBOMP?=/opt/homebrew/opt/libomp
 
 APPLE_CLANG:=$(shell $(CC) --version | grep "Apple clang" > /dev/null && echo 1 || echo 0)
@@ -15,16 +16,21 @@ else
     LDFLAGS += -fopenmp
 endif
 
+.PHONY: all
+all: ${ALL}
+
 debug: CFLAGS=-O0 -g
 
 %.o: %.c %.h
 	${CC} -c ${CFLAGS} $< -o $@
 
-all: ${ALL}
 
-2bfpbwt: 2bfpbwt.c
+# NOTE: this will be removed
+2bfpbwt: 2bfpbwt.c iobm.o
 	${CC} -o $@ ${CFLAGS} -I ${LIBOMP}/include -L ${LIBOMP}/lib $(LDFLAGS) $^ 
 
+2bfpbwt-bm: 2bfpbwt.c iobm.o
+	${CC} -o $@ ${CFLAGS} -I ${LIBOMP}/include -L ${LIBOMP}/lib $(LDFLAGS) $^ 
 gen: gen.c
 	${CC} -O3 $^ -o $@
 	
