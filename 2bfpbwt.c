@@ -558,6 +558,163 @@ void rrsort0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
     post = tmp;
   }
 }
+static inline void fgetcoliwg(FILE *fd, size_t i, size_t n,
+                              uint64_t *restrict c, size_t nc, uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+  int x;
+  fseek(fd, i * w, SEEK_SET);
+  for (size_t r = 0; r < n; r++) {
+    c[r] = 0;
+    for (size_t s = 0; s < w; s++) {
+      x = fgetc(fd) - 48;
+      /*printf("%d", x);*/
+      c[r] = (c[r] << 1) | x;
+    }
+    /*printf("=%llu", c[r]);*/
+    /*puts("");*/
+    fseek(fd, nc - w + 1, SEEK_CUR);
+  }
+}
+static inline void fgetcoliwgr(FILE *fd, size_t i, size_t n,
+                               uint64_t *restrict c, size_t nc, uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+  uint64_t x;
+  fseek(fd, i * w, SEEK_SET);
+  for (size_t r = 0; r < n; r++) {
+    c[r] = 0;
+    /*printf("r(");*/
+    for (size_t s = 0; s < w; s++) {
+      x = fgetc(fd) - 48;
+      /*printf("%llu", x);*/
+      c[r] = (x << s) | c[r];
+    }
+    /*printf(")=%llu\n", c[r]);*/
+    fseek(fd, nc - w + 1, SEEK_CUR);
+  }
+}
+// get column i from file
+// c[n] is a pointer to store the column,
+// nc is total number of columns, needed for fseek
+static void bfgetcolwgrn(FILE *fd, size_t n, uint64_t *restrict c, size_t nc,
+                         uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+
+  static size_t i = 0;
+  static size_t bufn = BFGETCOLWR_BUF_SIZE;
+  static uint64_t *buf = NULL;
+  if (!buf)
+    buf = malloc(BFGETCOLWR_BUF_SIZE * n * sizeof *buf);
+  char rbuf[64 * BFGETCOLWR_BUF_SIZE];
+
+  if (bufn == BFGETCOLWR_BUF_SIZE) {
+    uint64_t x;
+    fseek(fd, i * w, SEEK_SET);
+    for (size_t r = 0; r < n; r++) {
+      fread(&rbuf, 1, 64 * BFGETCOLWR_BUF_SIZE, fd);
+      for (size_t s = 0; s < BFGETCOLWR_BUF_SIZE; s++) {
+        buf[(n * s) + r] = 0;
+        for (size_t j = 0; j < w; j++) {
+          /*x = fgetc(fd) - 48;*/
+          x = rbuf[w * s + j] - 48;
+          buf[(n * s) + r] = (x << j) | buf[(n * s) + r];
+        }
+      }
+      c[r] = buf[r];
+      fseek(fd, nc - (BFGETCOLWR_BUF_SIZE * w) + 1, SEEK_CUR);
+    }
+    bufn = 1;
+  } else {
+    for (size_t r = 0; r < n; r++) {
+      c[r] = buf[(n * bufn) + r];
+    }
+    bufn++;
+  }
+  i++;
+}
+static void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
+                          uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+
+  static size_t i = 0;
+  static size_t bufn = BFGETCOLWR_BUF_SIZE;
+  static uint64_t *buf = NULL;
+  if (!buf)
+    buf = malloc(BFGETCOLWR_BUF_SIZE * n * sizeof *buf);
+  char rbuf[64 * BFGETCOLWR_BUF_SIZE];
+
+  if (bufn == BFGETCOLWR_BUF_SIZE) {
+    uint64_t x;
+    size_t offset;
+    /*lseek(fd, i * w, SEEK_SET);*/
+    offset = i * w;
+    for (size_t r = 0; r < n; r++) {
+      pread(fd, &rbuf, 64 * BFGETCOLWR_BUF_SIZE, offset);
+      for (size_t s = 0; s < BFGETCOLWR_BUF_SIZE; s++) {
+        buf[(n * s) + r] = 0;
+        /*pread(fd, &rbuf, w, offset + w * s);*/
+        for (size_t j = 0; j < w; j++) {
+          x = rbuf[w * s + j] - 48;
+          buf[(n * s) + r] = (x << j) | buf[(n * s) + r];
+        }
+      }
+      c[r] = buf[r];
+      offset += nc + 1;
+    }
+    bufn = 1;
+  } else {
+    for (size_t r = 0; r < n; r++) {
+      c[r] = buf[(n * bufn) + r];
+    }
+    bufn++;
+  }
+  i++;
+}
+
+// This version does not use window size to move in the file.
+// It starts reading from column `i` as-is without window-offset computation
+static inline void fgetcoliwgri(FILE *fd, size_t i, size_t n,
+                                uint64_t *restrict c, size_t nc, uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+  uint64_t x;
+  fseek(fd, i, SEEK_SET);
+  for (size_t r = 0; r < n; r++) {
+    c[r] = 0;
+    /*printf("r(");*/
+    for (size_t s = 0; s < w; s++) {
+      x = fgetc(fd) - 48;
+      /*printf("%llu", x);*/
+      c[r] = (x << s) | c[r];
+    }
+    /*printf(")=%llu\n", c[r]);*/
+    fseek(fd, nc - w + 1, SEEK_CUR);
+  }
+}
+
+static inline void sfgetcoliwgri(int fd, size_t i, size_t n,
+                                 uint64_t *restrict c, size_t nc, uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+  uint64_t x;
+  uint8_t _x;
+  lseek(fd, i, SEEK_SET);
+  for (size_t r = 0; r < n; r++) {
+    c[r] = 0;
+    /*printf("r(");*/
+    for (size_t s = 0; s < w; s++) {
+      read(fd, &_x, 1);
+      x = _x - 48;
+      /*printf("%llu", x);*/
+      c[r] = (x << s) | c[r];
+    }
+    /*printf(")=%llu\n", c[r]);*/
+    lseek(fd, nc - w + 1, SEEK_CUR);
+  }
+}
 
 typedef struct pbwtad pbwtad;
 struct pbwtad {
