@@ -1,7 +1,24 @@
 // vim:ft=c
 #include "io.h"
 
-void fgetcoli(FILE *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
+void fgetrc(void *fd, size_t *nr, size_t *nc) {
+  fseek(fd, 0, SEEK_SET);
+
+  *nc = *nr = 0;
+  int c, prev;
+  while ((c = fgetc(fd)) != 0xA)
+    (*nc)++;
+
+  (*nr)++;
+  prev = c;
+
+  while ((c = fgetc(fd)) != EOF) {
+    *nr += (c == 0xA) & (prev != 0xA);
+    prev = c;
+  }
+}
+
+void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
   int x;
@@ -17,7 +34,7 @@ void fgetcoli(FILE *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
 // get column i from file
 // c[n] is a pointer to store the column,
 // nc is total number of columns, needed for fseek
-void bfgetcoln(FILE *fd, size_t n, uint8_t *restrict c, size_t nc) {
+void bfgetcoln(void *fd, size_t n, uint8_t *restrict c, size_t nc) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
 
@@ -142,7 +159,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
 }
 
 #define FGETCOLIW_IMPL(W)                                                      \
-  void fgetcoliw##W(FILE *fd, size_t i, size_t n, uint64_t *restrict c,        \
+  void fgetcoliw##W(void *fd, size_t i, size_t n, uint64_t *restrict c,        \
                     size_t nc) {                                               \
     int x;                                                                     \
     fseek(fd, i *W, SEEK_SET);                                                 \
@@ -163,7 +180,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       c[r] = (c1 << (W - i)) | (wc[r] >> i);                                   \
     }                                                                          \
   }                                                                            \
-  void fgetcoliw##W##r(FILE *fd, size_t i, size_t n, uint64_t *restrict c,     \
+  void fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *restrict c,     \
                        size_t nc) {                                            \
     uint64_t x;                                                                \
     fseek(fd, i *W, SEEK_SET);                                                 \
@@ -184,7 +201,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       c[r] = (wp[r] >> (W - i)) | ((wc[r] << i) & mask);                       \
     }                                                                          \
   }                                                                            \
-  void bfgetcolw##W##rn(FILE *fd, size_t n, uint64_t *restrict c, size_t nc) { \
+  void bfgetcolw##W##rn(void *fd, size_t n, uint64_t *restrict c, size_t nc) { \
     static size_t i = 0;                                                       \
     static size_t bufn = BFGETCOLWR_BUF_SIZE;                                  \
     static uint64_t *buf = NULL;                                               \
@@ -302,7 +319,7 @@ FGETCOLIW_IMPL(16)
 FGETCOLIW_IMPL(32)
 FGETCOLIW_IMPL(64)
 
-void fgetcoliwg(FILE *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+void fgetcoliwg(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                 uint8_t w) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
@@ -321,7 +338,7 @@ void fgetcoliwg(FILE *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   }
 }
 
-void fgetcoliwgr(FILE *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                  uint8_t w) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
@@ -340,7 +357,7 @@ void fgetcoliwgr(FILE *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   }
 }
 
-void bfgetcolwgrn(FILE *fd, size_t n, uint64_t *restrict c, size_t nc,
+void bfgetcolwgrn(void *fd, size_t n, uint64_t *restrict c, size_t nc,
                   uint8_t w) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
@@ -417,7 +434,7 @@ void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
   i++;
 }
 
-void fgetcolwgri(FILE *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+void fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                  uint8_t w) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character

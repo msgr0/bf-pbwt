@@ -33,13 +33,13 @@ void fgetrc(void *fd, size_t *nr, size_t *nc);
 // get column i from file
 // c[n] is a pointer to store the column,
 // nc is total number of columns
-void fgetcoli(FILE *fd, size_t i, size_t n, uint8_t *c, size_t nc);
+void fgetcoli(void *fd, size_t i, size_t n, uint8_t *c, size_t nc);
 
 // Buffered File GET COLumn Next
 // get next column, using buffered freads
 // c[n] is a pointer to store the column,
 // nc is total number of columns
-void bfgetcoln(FILE *fd, size_t n, uint8_t *c, size_t nc);
+void bfgetcoln(void *fd, size_t n, uint8_t *c, size_t nc);
 
 // Syscall Buffered File GET COLumn Next
 // get next column, using buffered syscall preads
@@ -54,13 +54,13 @@ void sbfgetcoln(int fd, size_t n, uint8_t *c, size_t nc);
 void mbfgetcoln(int fd, size_t n, uint8_t *c, size_t nc);
 
 #define FGETCOLIW_DECLARE(W)                                                   \
-  void fgetcoliw##W(FILE *fd, size_t i, size_t n, uint64_t *c, size_t nc);     \
+  void fgetcoliw##W(void *fd, size_t i, size_t n, uint64_t *c, size_t nc);     \
   void w##W##mrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,           \
                    uint64_t *c, size_t i);                                     \
-  void fgetcoliw##W##r(FILE *fd, size_t i, size_t n, uint64_t *c, size_t nc);  \
+  void fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *c, size_t nc);  \
   void wr##W##mrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,          \
                     uint64_t *c, size_t i);                                    \
-  void bfgetcolw##W##rn(FILE *fd, size_t n, uint64_t *c, size_t nc);           \
+  void bfgetcolw##W##rn(void *fd, size_t n, uint64_t *c, size_t nc);           \
   void sbfgetcolw##W##rn(int fd, size_t n, uint64_t *c, size_t nc);            \
   void sbfgetcolw##W##rn_mmap(int fd, size_t n, uint64_t *c, size_t nc);
 
@@ -74,7 +74,7 @@ FGETCOLIW_DECLARE(64)
 // returing the bit-packed version of lenght w
 // c[n] is a pointer to store the column,
 // nc is total number of columns
-void fgetcoliwg(FILE *fd, size_t i, size_t n, uint64_t *c, size_t nc,
+void fgetcoliwg(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
                 uint8_t w);
 
 // File GET COLumn I Window General-length Reversed
@@ -82,7 +82,7 @@ void fgetcoliwg(FILE *fd, size_t i, size_t n, uint64_t *c, size_t nc,
 // returing the bit-packed reversed version of lenght w
 // c[n] is a pointer to store the column,
 // nc is total number of columns
-void fgetcoliwgr(FILE *fd, size_t i, size_t n, uint64_t *c, size_t nc,
+void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
                  uint8_t w);
 
 // Buffered File GET COLumn Window General-length Reversed Next
@@ -90,7 +90,7 @@ void fgetcoliwgr(FILE *fd, size_t i, size_t n, uint64_t *c, size_t nc,
 // returing the bit-packed reversed version of lenght w
 // c[n] is a pointer to store the column,
 // nc is total number of columns
-void bfgetcolwgrn(FILE *fd, size_t n, uint64_t *c, size_t nc, uint8_t w);
+void bfgetcolwgrn(void *fd, size_t n, uint64_t *c, size_t nc, uint8_t w);
 
 // Syscall Buffered File GET COLumn Window General-length Reversed Next
 // get next i*w column, using buffered syscall preads
@@ -106,7 +106,7 @@ void sbfgetcolwgrn(int fd, size_t n, uint64_t *c, size_t nc, uint8_t w);
 //
 // This version does not use window size to move in the file.
 // It starts reading from column `i` as-is without window-offset computation
-void fgetcolwgri(FILE *fd, size_t i, size_t n, uint64_t *c, size_t nc,
+void fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
                   uint8_t w);
 
 // Syscall File GET COLumn Window General-length starting at I
