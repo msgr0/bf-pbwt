@@ -135,6 +135,8 @@ void rrsort0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
   for (size_t i = 0; i < n; ++i)
     pre[i] = i;
 
+  // TODO: this should also consider for D[-1]
+
   for (size_t i = 0; i < 8; i++) {
     size_t cnt[256] = {0};
 
@@ -556,7 +558,6 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
   size_t *aux = malloc(nrow * sizeof *aux);
 
   pbwtad *ps = pbwtad_new(nrow);
-  /*ps->a = malloc(nrow * sizeof *(ps->a));*/
   pb[W - 1] = ps;
   fgetcoliw64r(fin, 0, nrow, pw, ncol);
   rrsort0(nrow, pw, ps->a, aux);
@@ -565,8 +566,6 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
   for (j = 1; j * W <= ncol - W; j++) {
     /*fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);*/
     pbwtad *ps = pbwtad_new(nrow);
-    /*pbwtad *ps = malloc(nrow * sizeof *ps);*/
-    /*ps->a = malloc(nrow * sizeof *(ps->a));*/
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
     fgetcoliw64r(fin, j, nrow, pw, ncol);
@@ -617,16 +616,14 @@ pbwtad **wbapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
   uint64_t *pw = malloc(nrow * sizeof *pw);
   size_t *aux = malloc(nrow * sizeof *aux);
 
-  pbwtad *ps = malloc(nrow * sizeof *ps);
-  ps->a = malloc(nrow * sizeof *(ps->a));
+  pbwtad *ps = pbwtad_new(nrow);
   pb[W - 1] = ps;
   bfgetcolw64rn(fin, nrow, pw, ncol);
   rrsort0(nrow, pw, ps->a, aux);
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    pbwtad *ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
+    pbwtad *ps = pbwtad_new(nrow);
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
     bfgetcolw64rn(fin, nrow, pw, ncol);
@@ -677,16 +674,14 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol,
   uint64_t *pw = malloc(nrow * sizeof *pw);
   size_t *aux = malloc(nrow * sizeof *aux);
 
-  pbwtad *ps = malloc(nrow * sizeof *ps);
-  ps->a = malloc(nrow * sizeof *(ps->a));
+  pbwtad *ps = pbwtad_new(nrow);
   pb[W - 1] = ps;
   sbfgetcolw64rn(fin, nrow, pw, ncol);
   rrsort0(nrow, pw, ps->a, aux);
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    pbwtad *ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
+    pbwtad *ps = pbwtad_new(nrow);
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
     sbfgetcolw64rn(fin, nrow, pw, ncol);
@@ -738,16 +733,14 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol,
   uint64_t *pw = malloc(nrow * sizeof *pw);
   size_t *aux = malloc(nrow * sizeof *aux);
 
-  pbwtad *ps = malloc(nrow * sizeof *ps);
-  ps->a = malloc(nrow * sizeof *(ps->a));
+  pbwtad *ps = pbwtad_new(nrow);
   pb[W - 1] = ps;
   sbfgetcolw64rn_mmap(fin, nrow, pw, ncol);
   rrsort0(nrow, pw, ps->a, aux);
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    pbwtad *ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
+    pbwtad *ps = pbwtad_new(nrow);
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
     sbfgetcolw64rn_mmap(fin, nrow, pw, ncol);
@@ -879,15 +872,14 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
   // TODO: ask if true
 
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  pbwtad *p0 = malloc(sizeof *p0);
-  p0->a = malloc(nrow * sizeof *(p0->a));
+  pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
+    p0->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
   pb[0] = cpbwt_0(nrow, c0, p0);
-  FREE(p0->a);
-  FREE(p0);
+  PBWTAD_FREE(p0);
 
   for (int j = 1; j < W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
@@ -903,8 +895,7 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
 
   for (j = 1; j * W <= ncol - W; j++) {
     /*fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);*/
-    pbwtad *ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
+    pbwtad *ps = pbwtad_new(nrow);
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
     fgetcoliw64r(fin, j, nrow, pw1, ncol);
@@ -916,8 +907,7 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
       size_t J = W * (j + 1) - 1;
 
       wr64mrgsi(nrow, pw1, pw0, w, x);
-      pbwtad *ps = malloc(nrow * sizeof *ps);
-      ps->a = malloc(nrow * sizeof *(ps->a));
+      pbwtad *ps = pbwtad_new(nrow);
       pb[J - x] = ps;
       memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
       rrsortx_noaux(nrow, w, ps->a);
@@ -958,15 +948,14 @@ pbwtad **bwparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
   // TODO: ask if true
 
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  pbwtad *p0 = malloc(sizeof *p0);
-  p0->a = malloc(nrow * sizeof *(p0->a));
+  pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
+    p0->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
   pb[0] = cpbwt_0(nrow, c0, p0);
-  FREE(p0->a);
-  FREE(p0);
+  PBWTAD_FREE(p0);
 
   for (int j = 1; j < W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
@@ -982,8 +971,7 @@ pbwtad **bwparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
 
   for (j = 1; j * W <= ncol - W; j++) {
     /*fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);*/
-    pbwtad *ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
+    pbwtad *ps = pbwtad_new(nrow);
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
     /*fgetcoliw64r(fin, j, nrow, pw1, ncol);*/
@@ -996,8 +984,7 @@ pbwtad **bwparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
       size_t J = W * (j + 1) - 1;
 
       wr64mrgsi(nrow, pw1, pw0, w, x);
-      pbwtad *ps = malloc(nrow * sizeof *ps);
-      ps->a = malloc(nrow * sizeof *(ps->a));
+      pbwtad *ps = pbwtad_new(nrow);
       pb[J - x] = ps;
       memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
       rrsortx_noaux(nrow, w, ps->a);
@@ -1043,15 +1030,14 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
     exit(32);
   }
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  pbwtad *p0 = malloc(sizeof *p0);
-  p0->a = malloc(nrow * sizeof *(p0->a));
+  pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
+    p0->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
   pb[0] = cpbwt_0(nrow, c0, p0);
-  FREE(p0->a);
-  FREE(p0);
+  PBWTAD_FREE(p0);
   /*printf("[man] c:0 (<1..N)\n");*/
 
   for (size_t j = 1; j < W; j++) {
@@ -1085,13 +1071,10 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
         /*printf("[par:%d] c:%zu (<%zu)\n", tid, j + W, j);*/
 
         uint64_t *pw = malloc(nrow * sizeof *pw);
-        pbwtad *ps = malloc(nrow * sizeof *ps);
-        ps->a = malloc(nrow * sizeof *(ps->a));
+        pbwtad *ps = pbwtad_new(nrow);
         pb[j + W] = ps;
         memcpy(ps->a, pb[j]->a, nrow * sizeof *(ps->a));
 
-        /*#pragma omp critical(fgetcol_lock)*/
-        /*        { fgetcoliwgri(fin, j + 1, nrow, pw, ncol, W); }*/
         fgetcolwgri(fin, j + 1, nrow, pw, ncol, W);
         // maybe change to aux for each thread
         rrsortx_noaux(nrow, pw, ps->a);
