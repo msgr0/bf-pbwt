@@ -27,22 +27,7 @@
 #endif
 
 // get row and column count from file
-static inline void fgetrc(FILE *fd, size_t *nr, size_t *nc) {
-  fseek(fd, 0, SEEK_SET);
-
-  *nc = *nr = 0;
-  int c, prev;
-  while ((c = fgetc(fd)) != 0xA)
-    (*nc)++;
-
-  (*nr)++;
-  prev = c;
-
-  while ((c = fgetc(fd)) != EOF) {
-    *nr += (c == 0xA) & (prev != 0xA);
-    prev = c;
-  }
-}
+void fgetrc(void *fd, size_t *nr, size_t *nc);
 
 // File GET COLumn I
 // get column i from file
