@@ -38,6 +38,13 @@ clean:
 	-rm *.o $(ALL)
 
 
+CHECKPANEL?=panel.r10.c800.txt
+CHECKMODES?=lin bli blis blim ars bar bars barm prs bpr spr
+check-bm-%: 2bfpbwt-bm
+	@./$^ $* ${CHECKPANEL} 1>/dev/null 2>&1
+check-bm: $(foreach m,$(CHECKMODES),check-bm-$(m))
+.PHONY: check-bm
+
 SHELL:=/bin/bash
 PANEL?=panel.r5k.c50k.txt
 LOOPS?=10
