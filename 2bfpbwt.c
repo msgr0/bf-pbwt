@@ -8,6 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef BF2IOMODE_BCF
+#include "htslib/synced_bcf_reader.h"
+#endif
+
 #define W 64
 
 #define FREE(x)                                                                \
@@ -397,7 +401,7 @@ static pbwtad *cpbwtk(size_t n, uint8_t *restrict c, pbwtad *restrict p,
 #define DPARR(args...)
 #endif
 
-pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
+pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   size_t *o = malloc(nrow * sizeof *o);
   size_t *z = malloc(nrow * sizeof *z);
@@ -441,7 +445,7 @@ pbwtad **linc(FILE *fin, size_t nrow, size_t ncol) {
   FREE(z);
   return pl;
 }
-pbwtad **blinc(FILE *fin, size_t nrow, size_t ncol) {
+pbwtad **blinc(void *fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
@@ -547,7 +551,7 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
 }
 
 typedef enum { APPROX_MODE_LAST_WINDOW, APPROX_MODE_LAST_LIN } APPROX_MODE;
-pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
+pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol,
                       APPROX_MODE lastmode) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
@@ -606,7 +610,7 @@ pbwtad **wapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
   FREE(c0);
   return pb;
 }
-pbwtad **wbapproxc_rrs(FILE *fin, size_t nrow, size_t ncol,
+pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol,
                        APPROX_MODE lastmode) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
@@ -863,7 +867,7 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
   return pb;
 }
 
-pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
+pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
@@ -939,7 +943,7 @@ pbwtad **wparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
   FREE(c0);
   return pb;
 }
-pbwtad **bwparc_rrs(FILE *fin, size_t nrow, size_t ncol) {
+pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
@@ -1186,15 +1190,129 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+#if defined(BF2IOMODE_BM)
   FILE *fin = fopen(argv[2], "r");
+  int fd = open(argv[2], O_RDONLY);
   if (!fin) {
     perror("[main]");
     return EXIT_FAILURE;
   }
+#elif defined(BF2IOMODE_BCF)
+  int fd = -1;
+  void *fin = NULL;
+
+#if 0
+  htsFile *fp = hts_open(argv[2], "rb");
+  bcf_hdr_t *hdr = bcf_hdr_read(fp);
+  bcf1_t *rec = bcf_init();
+  size_t n = 0;
+  while (bcf_read(fp, hdr, rec) >= 0) {
+    bcf_unpack(rec, BCF_UN_ALL); // NOTE: ?
+    int32_t *gt_arr = NULL, ngt_arr = 0;
+    int i, j, ngt, nsmpl = bcf_hdr_nsamples(hdr);
+    ngt = bcf_get_genotypes(hdr, rec, &gt_arr, &ngt_arr);
+    int max_ploidy = ngt / nsmpl;
+    // printf("\nmax_ploidy = %d\n", max_ploidy);
+    // parr(ngt, gt_arr, "%d ");
+    uint8_t *col = malloc(nsmpl * 2 * sizeof *col);
+    size_t icol = 0;
+    for (i = 0; i < nsmpl; i++) {
+      int32_t *ptr = gt_arr + i * max_ploidy;
+      // printf("  %d", *ptr);
+      for (j = 0; j < max_ploidy; j++) {
+        // if true, the sample has smaller ploidy
+        // If a sample has less genotypes than max_ploidy,
+        // the "vector" retains the size of max_ploidy, but
+        // missing ploid are filled with `bcf_int32_vector_end` macro
+        if (ptr[j] == bcf_int32_vector_end)
+          break;
+
+        // missing allele
+        if (bcf_gt_is_missing(ptr[j]))
+          exit(-1);
+
+        // the VCF 0-based allele index
+        col[icol] = bcf_gt_allele(ptr[j]);
+        icol++;
+      }
+    }
+    printf("%zu: %d\n", n, col[1]);
+    n++;
+    // putchar(0xA);
+    // parr(nsmpl * 2, col, "%d ");
+  }
+#else
+  bcf_srs_t *sr = bcf_sr_init();
+  bcf_sr_add_reader(sr, argv[2]);
+
+#endif
+
+  fin = sr;
+
+#else
+#error BF2IOMODE is not specified
+#endif
 
   size_t nrow, ncol;
+#ifdef BF2IOMODE_BCF
+  bcf_srs_t *_sr = bcf_sr_init();
+  bcf_sr_add_reader(_sr, argv[2]);
+  fgetrc(_sr, &nrow, &ncol);
+  // WARN: seeking does not work for unknown reasons.
+  // Therefore here I need to duplicate the input.
+  // bcf_sr_seek(sr, NULL, 0);
+  bcf_sr_destroy(_sr);
+#else
   fgetrc(fin, &nrow, &ncol);
+#endif
   DPRINT("[%s] row: %5zu, col: %5zu\n", __func__, nrow, ncol);
+  // uint8_t *cc = malloc(nrow * sizeof *cc);
+  // fgetcoli(fin, 0, nrow, cc, 0);
+  // parr(nrow, cc, "%d ");
+  // fgetcoli(fin, 1, nrow, cc, 0);
+  // parr(nrow, cc, "%d ");
+  // fgetcoli(fin, 2, nrow, cc, 0);
+  // parr(nrow, cc, "%d ");
+  // fgetcoli(fin, 3, nrow, cc, 0);
+  // parr(nrow, cc, "%d ");
+  // fgetcoli(fin, 4, nrow, cc, 0);
+  // parr(nrow, cc, "%d ");
+  // fgetcoli(fin, 5, nrow, cc, 0);
+  // parr(nrow, cc, "%d ");
+  // fgetcoli(fin, 7, nrow, cc, 0);
+
+  // bcf_hdr_t *hdr = sr->readers[0].header;
+  // int nsmpl = bcf_hdr_nsamples(hdr);
+  // printf("nsmpl: %d\n", nsmpl);
+
+  // uint8_t *col = malloc(nsmpl * 2 * sizeof *col); // NOTE: assume diploid
+  // size_t n = 0;
+  // while (bcf_sr_next_line(sr)) {
+  //   bcf1_t *line = bcf_sr_get_line(sr, 0);
+  //   int32_t *gt_arr = NULL, ngt_arr = 0;
+  //   int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
+  //
+  //   size_t icol = 0;
+  //   for (size_t i = 0; i < nsmpl; i++) {
+  //     int32_t *ptr = gt_arr + i * 2;
+  //     // hap 1
+  //     // if (ptr[0] == bcf_int32_vector_end)
+  //     //   exit(-2);
+  //     // if (bcf_gt_is_missing(ptr[0]))
+  //     //   exit(-1);
+  //     col[2 * i] = bcf_gt_allele(ptr[0]);
+  //
+  //     // hap 2
+  //     // if (ptr[1] == bcf_int32_vector_end)
+  //     //   exit(-2);
+  //     // if (bcf_gt_is_missing(ptr[1]))
+  //     //   exit(-1);
+  //     col[2 * i + 1] = bcf_gt_allele(ptr[1]);
+  //   }
+  //   // parr(nsmpl * 2, col, "%d ");
+  //   printf("%zu: %d\n", n, col[1]);
+  //   n++;
+  // }
   pbwtad **r;
 
   if (strcmp(argv[1], "lin") == 0) {
@@ -1202,10 +1320,8 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "bli") == 0) {
     r = blinc(fin, nrow, ncol);
   } else if (strcmp(argv[1], "blis") == 0) {
-    int fd = open(argv[2], O_RDONLY);
     r = sblinc(fd, nrow, ncol);
   } else if (strcmp(argv[1], "blim") == 0) {
-    int fd = open(argv[2], O_RDONLY);
     r = mblinc(fd, nrow, ncol);
   } else if (strcmp(argv[1], "ars") == 0) {
     r = wapproxc_rrs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
@@ -1216,10 +1332,8 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "bar") == 0) {
     r = wbapproxc_rrs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
   } else if (strcmp(argv[1], "bars") == 0) {
-    int fd = open(argv[2], O_RDONLY);
     r = swbapproxc_rrs(fd, nrow, ncol, APPROX_MODE_LAST_WINDOW);
   } else if (strcmp(argv[1], "barm") == 0) {
-    int fd = open(argv[2], O_RDONLY);
     r = mwbapproxc_rrs(fd, nrow, ncol, APPROX_MODE_LAST_WINDOW);
   } else if (strcmp(argv[1], "prs") == 0) {
     r = wparc_rrs(fin, nrow, ncol);
@@ -1269,6 +1383,35 @@ int main(int argc, char *argv[]) {
 #endif
 
   /*fclose(fin);*/
+
+  if (argc > 3) {
+    if (strcmp(argv[3], "DUMP") == 0) {
+      if (r != NULL) {
+        for (size_t i = 0; i < ncol; i++) {
+          printf("%zu:", i);
+          if (r[i]) {
+            size_t j;
+            if (r[i]->a) {
+              for (j = 0; j < nrow - 1; j++)
+                printf("%zu ", r[i]->a[j]);
+              printf("%zu", r[i]->a[j]);
+            } else
+              printf("NULL");
+            printf("|");
+            if (r[i]->d) {
+              for (j = 0; j < nrow - 1; j++)
+                printf("%zu ", r[i]->d[j]);
+              printf("%zu", r[i]->d[j]);
+            } else
+              printf("NULL");
+          } else {
+            printf("NULL");
+          }
+          printf("\n");
+        }
+      }
+    }
+  }
 
   if (r != NULL) {
     for (size_t i = 0; i < ncol; i++) {
