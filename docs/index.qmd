@@ -96,8 +96,9 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
   + HB-parallel PBWT (VCF?): last version, horizontally parallel [@tangHaplotypebasedParallelPBWT2025] Long Matches and SMEMs
     
     ---
-  + mu-pbwt: [@cozziPBWTLightweightRindexing2023] Run-Lenght Encoded PBWT + MS and SMEMs against Query
-  + syllable-PBWT: [@wangSyllablePBWTSpaceefficientHaplotype2023] Syllable-packed PBWT, hexadecimal every 4 bits.. Fanno solo Long Matches (query). Non fanno SMEMs, non fanno Blocchi. Handles only VCFs and not BCFs (comparazione con Cozzi's mu-pbwt).
+  + mu-pbwt(VCF/BCF): [@cozziPBWTLightweightRindexing2023] Run-Lenght Encoded PBWT + MS and SMEMs against Query
+  + syllable-PBWT(VCF): [@wangSyllablePBWTSpaceefficientHaplotype2023] Syllable-packed PBWT, hexadecimal every 4 bits.. Fanno solo Long Matches (query). Non fanno SMEMs, non fanno Blocchi. Handles only VCFs and not BCFs (comparazione con Cozzi's mu-pbwt).
+  
   + d-pbwt:[@sanaullahDPBWTDynamicPositional2021], Query of SMEMs, Long matches, All vs All 
   + mu+d-pbwt: [@shakyaDynamicMPBWTDynamic2025], RLE + Dynamic PBWT
 
@@ -108,11 +109,11 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
 ## C. Internal Matches and Blocks
 
 - MPHB
-  + (Trie) [Cunha et al, @cunhaIdentifyingMaximalPerfect2018], (mPBWT) [Alanko et al., @alankoFindingAllMaximal2020]
-  + (bi-directional PBWT) [Naseri et al, @naseriEfficientHaplotypeBlock2021] "Blocks of at least width $W$ + report exact length"
+  + (Trie, binary matrix) [Cunha et al, @cunhaIdentifyingMaximalPerfect2018], (mPBWT, binary matrix) [Alanko et al., @alankoFindingAllMaximal2020]
+  + (bi-directional PBWT, VCF) [Naseri et al, @naseriEfficientHaplotypeBlock2021] "Blocks of at least width $W$ + report exact length"
 
 - MPHBw & MHBw
-  + (Trie) [Williams et al., @williamsMaximalPerfectHaplotype2020], (mPBWT) [Bonizzoni et al., @bonizzoniMultiallelicMaximalPerfect2023]
+  + (Trie, binary matrix) [Williams et al., @williamsMaximalPerfectHaplotype2020], (mPBWT, binary matrix) [Bonizzoni et al., @bonizzoniMultiallelicMaximalPerfect2023]
 
 ## Compression
 
