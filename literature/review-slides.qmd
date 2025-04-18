@@ -1,0 +1,111 @@
+---
+title: "pbwt literature review"
+author: "Mattia S."
+bibliography: references.bib
+bibliographystyle: unsrt
+csl: diabetologia.csl
+format:
+  revealjs:
+    reference-location: document
+    slide-number: true
+    smaller: true
+    chalkboard: 
+      buttons: false
+    preview-links: auto
+    font-size: 12pt
+---
+
+## Basic PBWT [@durbinEfficientHaplotypeMatching2014]{.smaller} 
+
+**Input**:
+
+a binary matrix $X$, of $m$ rows and $n$ columns.
+$(\Sigma = \{0, 1\})$, where $x_i$ are haplotype sequences; $0\leq i < m$ and $x_i \in \Sigma^n$
+
+. . .
+
+**Output**:
+
+for each column $k$ in $0\leq k < n$ we represent:
+
+- a *prefix* array $A_k$ that stores the permutation of the rows in $X$ according to the co-lex ordering of the subsequences of $X$ from $0$ to $k$;
+
+- $Y_k$, the entire matrix $X$ with $x_i$ permuted according to $A_k$ (not computed)
+
+- an array $y^k = Y_k[k+1]$ containg the permutation of the input $X$'s next column, according to the row permutation in $A_k$.
+  This is computed on-the-fly (and not stored!) reading $X[k+1]$ by the permutation stored in $A_k$.
+
+- a *divergence* array $D_k$ that stores the length of the $LCP^{-1}$ between each pair $(y_i[0,k], y_{i-1}[0,k])$
+
+<!--The PBWT of $X$ can be efficiently stored saving only $y^k$ for each $k, 0 \leq k < n$-->
+
+## PBWT basics 
+
+The catch 
+
+> $A_k$ and $D_k$ can be computed by $A_{k-1}$ and $D_{k-1}$ linearly in space/time $O(m)$[@durbinEfficientHaplotypeMatching2014].
+
+::: {.incremental}
+- The overall computation time of the $\texttt{PBWT}$ (composed of arrays $A_k$ and $D_k$ for each $k$ ...
+is $O(n\cdot m)$.
+
+- Moreover, if we keep only $\texttt{PBWT}_{k}$ to compute the next $\texttt{PBWT}_{k+1}$, we can do so in $O(m)$ space,
+performing some other computation on each $\texttt{PBWT}$ before it is discarded.
+:::
+
+## What PBWT is (mainly) used for: {.smaller}
+1. computing Matching Statistics (MS) and Set Maximal Exact Matches (SMEMs)
+
+1. computing internal matches longer than $L$ and Maximal Perfect Haplotype Blocks (MPHB) 
+
+1. Compression
+
+(1 and 2) are used to make statitstics on Identity-by-Descendant (IDB) segments or to identify positive selection areas
+(3 ) an example of pbwt used to compress VCFs [@Wertenbroek_2022].
+ 
+## Computing MS and SMEMs {.scrollable}
+
+- **Goal**: match a pattern $P$ (shorter or equal the matrix width $n$) against $X$.
+  
+  We want to compute the best matching haplotype (in colex oreder) in $X$ to each subsequence of $P$ from $0$ to $k$, for each $k$ in $0 \leq k < |P|$
+
+
+- Can be computed sweeping trough the $D$ array and tracking the *matching statistics* 
+
+- **tools**:
+  + mc-PBWT: multi column (parallel?) scanning of the PBWT (double and triple) [@shakyaMcPBWTSpaceEfficientMulticolumn2022] used for "Matches of exact Lenght $L$
+    
+    ---
+  + parallel PBWT: first version, vertically parallel + reconcile [@wertenbroekExploitingParallelizationPositional2023] Long Matches and SMEMs 
+  + HB-parallel PBWT: last version, horizontally parallel [@tangHaplotypebasedParallelPBWT2025] Long Matches and SMEMs
+    
+    ---
+  + mu-pbwt: [@cozziPBWTLightweightRindexing2023] Run-Lenght Encoded PBWT + MS and SMEMs against Query
+  + syllable-PBWT: [@wangSyllablePBWTSpaceefficientHaplotype2023] Syllable-packed PBWT, hexadecimal every 4 bits.. Fanno solo Long Matches (query). Non fanno SMEMs, non fanno Blocchi. Handles only VCFs and not BCFs (comparazione con Cozzi's mu-pbwt).
+  + d-pbwt:[@sanaullahDPBWTDynamicPositional2021], Query of SMEMs, Long matches, All vs All 
+  + mu+d-pbwt: [@shakyaDynamicMPBWTDynamic2025], RLE + Dynamic PBWT
+
+  + efficient matching: [@naseriEfficientHaplotypeMatching2019]
+
+  + templated-PBWT [@freymanFastRobustIdentitybyDescent2021]
+
+## C. Internal Matches and Blocks
+
+- MPHB
+  + (Trie) [Cunha et al, @cunhaIdentifyingMaximalPerfect2018], (mPBWT) [Alanko et al., @alankoFindingAllMaximal2020]
+  + (bi-directional PBWT) [Naseri et al, @naseriEfficientHaplotypeBlock2021] "Blocks of at least width $W$ + report exact length"
+
+- MPHBw & MHBw
+  + (Trie) [Williams et al., @williamsMaximalPerfectHaplotype2020], (mPBWT) [Bonizzoni et al., @bonizzoniMultiallelicMaximalPerfect2023]
+
+## Compression
+
+- Run-Length encoding
+
+
+
+
+## References {.smaller}
+
+::: {#refs}
+:::
