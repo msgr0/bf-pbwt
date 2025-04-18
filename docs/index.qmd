@@ -6,7 +6,9 @@ bibliography: references.bib
 bibliographystyle: unsrt
 csl: diabetologia.csl
 format:
-  revealjs:
+  html
+---
+<!--  revealjs:
     reference-location: document
     slide-number: true
     smaller: true
@@ -15,6 +17,7 @@ format:
     preview-links: auto
     font-size: 12pt
 ---
+-->
 
 # bf-pbwt results
 
@@ -119,7 +122,7 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
 
 - Run-Length encoding
 
-
+<!--
 ## List {.scrollable}
 
 Durbin's (Set maximal exact matches)
@@ -154,7 +157,7 @@ Durbin's (Set maximal exact matches)
 - psmoother (pbwt, c++)
 - wild-pbwt (pbwt, c++)
 - wildhap (trie, java)
-
+-->
 
 ## References {.smaller}
 
