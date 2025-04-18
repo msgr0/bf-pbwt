@@ -2,12 +2,14 @@ CC?=cc
 CFLAGS?=-O3
 
 VPATH=lib/quadsort
-ALL=2bfpbwt-bm gen
-ALL+=2bfpbwt # NOTE: this will be removed
+ALL=gen 2bfpbwt-bm 2bfpbwt-bcf
 LIBOMP?=/opt/homebrew/opt/libomp
+HTSLIB?=/opt/htslib
+
+LIBOMP_INCL=-I ${LIBOMP}/include -L ${LIBOMP}/lib
+HTSLIB_INCL=-I ${HTSLIB}/include -L ${HTSLIB}/lib
 
 APPLE_CLANG:=$(shell $(CC) --version | grep "Apple clang" > /dev/null && echo 1 || echo 0)
-
 ifeq ($(APPLE_CLANG),1)
     CFLAGS += -Xpreprocessor -fopenmp
     LDFLAGS += -lomp
@@ -16,21 +18,27 @@ else
     LDFLAGS += -fopenmp
 endif
 
+# CCINCL+= -I ${HTSLIB}/include -L ${HTSLIB}/lib
+
 .PHONY: all
 all: ${ALL}
 
 debug: CFLAGS=-O0 -g
 
 %.o: %.c %.h
-	${CC} -c ${CFLAGS} $< -o $@
+	${CC} -c ${CFLAGS} ${CCINCL} $< -o $@
 
 
-# NOTE: this will be removed
-2bfpbwt: 2bfpbwt.c iobm.o
-	${CC} -o $@ ${CFLAGS} -I ${LIBOMP}/include -L ${LIBOMP}/lib $(LDFLAGS) $^ 
-
+2bfpbwt-bm: CCINCL=${LIBOMP_INCL}
 2bfpbwt-bm: 2bfpbwt.c iobm.o
-	${CC} -o $@ ${CFLAGS} -I ${LIBOMP}/include -L ${LIBOMP}/lib $(LDFLAGS) $^ 
+	${CC} -o $@ ${CFLAGS} -DBF2IOMODE_BM ${CCINCL} $(LDFLAGS) $^ 
+
+iobcf.o: iobcf.c
+	${CC} -c ${CFLAGS} ${HTSLIB_INCL} $< -o $@ -lhts
+2bfpbwt-bcf: CCINCL=${LIBOMP_INCL} ${HTSLIB_INCL}
+2bfpbwt-bcf: 2bfpbwt.c iobcf.o
+	${CC} -o $@ ${CFLAGS} -DBF2IOMODE_BCF ${CCINCL} $(LDFLAGS) -lhts $^ 
+
 gen: gen.c
 	${CC} -O3 $^ -o $@
 	
@@ -49,7 +57,7 @@ SHELL:=/bin/bash
 PANEL?=panel.r5k.c50k.txt
 LOOPS?=10
 MODES?=bar bli blim
-loop-%: 2bfpbwt
+loop-%: 2bfpbwt-bm
 	@tmpfile=$$(mktemp); \
 	for ((i=1; i <= ${LOOPS}; ++i)) do \
 		echo -e "[$*] running $$i" >&2; \
