@@ -285,8 +285,8 @@ Mattia S.
 <li><p>parallel PBWT (VCF/BCF): first version, vertically parallel + reconcile <span class="citation" data-cites="wertenbroekExploitingParallelizationPositional2023">[<a href="#/references" role="doc-biblioref" onclick="">4</a>]</span> Long Matches and SMEMs</p></li>
 <li><p>HB-parallel PBWT (VCF?): last version, horizontally parallel <span class="citation" data-cites="tangHaplotypebasedParallelPBWT2025">[<a href="#/references" role="doc-biblioref" onclick="">5</a>]</span> Long Matches and SMEMs</p>
 <hr></li>
-<li><p>mu-pbwt: <span class="citation" data-cites="cozziPBWTLightweightRindexing2023">[<a href="#/references" role="doc-biblioref" onclick="">6</a>]</span> Run-Lenght Encoded PBWT + MS and SMEMs against Query</p></li>
-<li><p>syllable-PBWT: <span class="citation" data-cites="wangSyllablePBWTSpaceefficientHaplotype2023">[<a href="#/references" role="doc-biblioref" onclick="">7</a>]</span> Syllable-packed PBWT, hexadecimal every 4 bits.. Fanno solo Long Matches (query). Non fanno SMEMs, non fanno Blocchi. Handles only VCFs and not BCFs (comparazione con Cozzi’s mu-pbwt).</p></li>
+<li><p>mu-pbwt(VCF/BCF): <span class="citation" data-cites="cozziPBWTLightweightRindexing2023">[<a href="#/references" role="doc-biblioref" onclick="">6</a>]</span> Run-Lenght Encoded PBWT + MS and SMEMs against Query</p></li>
+<li><p>syllable-PBWT(VCF): <span class="citation" data-cites="wangSyllablePBWTSpaceefficientHaplotype2023">[<a href="#/references" role="doc-biblioref" onclick="">7</a>]</span> Syllable-packed PBWT, hexadecimal every 4 bits.. Fanno solo Long Matches (query). Non fanno SMEMs, non fanno Blocchi. Handles only VCFs and not BCFs (comparazione con Cozzi’s mu-pbwt).</p></li>
 <li><p>d-pbwt:<span class="citation" data-cites="sanaullahDPBWTDynamicPositional2021">[<a href="#/references" role="doc-biblioref" onclick="">8</a>]</span>, Query of SMEMs, Long matches, All vs All</p></li>
 <li><p>mu+d-pbwt: <span class="citation" data-cites="shakyaDynamicMPBWTDynamic2025">[<a href="#/references" role="doc-biblioref" onclick="">9</a>]</span>, RLE + Dynamic PBWT</p></li>
 <li><p>efficient matching: <span class="citation" data-cites="naseriEfficientHaplotypeMatching2019">[<a href="#/references" role="doc-biblioref" onclick="">10</a>]</span></p></li>
@@ -299,12 +299,12 @@ Mattia S.
 <ul>
 <li>MPHB
 <ul>
-<li>(Trie) <span class="citation" data-cites="cunhaIdentifyingMaximalPerfect2018">[Cunha et al, <a href="#/references" role="doc-biblioref" onclick="">12</a>]</span>, (mPBWT) <span class="citation" data-cites="alankoFindingAllMaximal2020">[Alanko et al., <a href="#/references" role="doc-biblioref" onclick="">13</a>]</span></li>
-<li>(bi-directional PBWT) <span class="citation" data-cites="naseriEfficientHaplotypeBlock2021">[Naseri et al, <a href="#/references" role="doc-biblioref" onclick="">14</a>]</span> “Blocks of at least width <span class="math inline">\(W\)</span> + report exact length”</li>
+<li>(Trie, binary matrix) <span class="citation" data-cites="cunhaIdentifyingMaximalPerfect2018">[Cunha et al, <a href="#/references" role="doc-biblioref" onclick="">12</a>]</span>, (mPBWT, binary matrix) <span class="citation" data-cites="alankoFindingAllMaximal2020">[Alanko et al., <a href="#/references" role="doc-biblioref" onclick="">13</a>]</span></li>
+<li>(bi-directional PBWT, VCF) <span class="citation" data-cites="naseriEfficientHaplotypeBlock2021">[Naseri et al, <a href="#/references" role="doc-biblioref" onclick="">14</a>]</span> “Blocks of at least width <span class="math inline">\(W\)</span> + report exact length”</li>
 </ul></li>
 <li>MPHBw &amp; MHBw
 <ul>
-<li>(Trie) <span class="citation" data-cites="williamsMaximalPerfectHaplotype2020">[Williams et al., <a href="#/references" role="doc-biblioref" onclick="">15</a>]</span>, (mPBWT) <span class="citation" data-cites="bonizzoniMultiallelicMaximalPerfect2023">[Bonizzoni et al., <a href="#/references" role="doc-biblioref" onclick="">16</a>]</span></li>
+<li>(Trie, binary matrix) <span class="citation" data-cites="williamsMaximalPerfectHaplotype2020">[Williams et al., <a href="#/references" role="doc-biblioref" onclick="">15</a>]</span>, (mPBWT, binary matrix) <span class="citation" data-cites="bonizzoniMultiallelicMaximalPerfect2023">[Bonizzoni et al., <a href="#/references" role="doc-biblioref" onclick="">16</a>]</span></li>
 </ul></li>
 </ul>
 </section>
