@@ -1,5 +1,5 @@
 ---
-title: "pbwt literature review"
+title: "on the positional BWT" 
 author: "Mattia S."
 output-dir: docs
 bibliography: references.bib
@@ -16,6 +16,21 @@ format:
     font-size: 12pt
 ---
 
+# bf-pbwt results
+
+|BLIM timing(s)|chr10(18gb)|chr21(4.7gb)|chr22(4.8)|
+|---|---|---|---|---|
+|2bfpbwt-bm on master| 690.53 | 110.47 | 116.99 |
+|2bfpbwt on (71a045a) | 294.98 | 74.48 | 75.54 |
+|2bfpbwt-bm on (hotfix) | 753.71 | 108.56 | 113.40 |
+
+|BLIM ram (GiB) |chr10(18gb)|chr21(4.7gb)|chr22(4.8)|
+|---|---|---|---|---|
+|2bfpbwt-bm on master| 250| 82 | 84 |
+|2bfpbwt on (71a045a) | 158 | 43 | 44 |
+|2bfpbwt-bm on (hotfix) | 244 | 82 | 84 |
+
+# REVIEW
 ## Basic PBWT [@durbinEfficientHaplotypeMatching2014]{.smaller} 
 
 **Input**:
@@ -77,8 +92,8 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
   + mc-PBWT: multi column (parallel?) scanning of the PBWT (double and triple) [@shakyaMcPBWTSpaceEfficientMulticolumn2022] used for "Matches of exact Lenght $L$
     
     ---
-  + parallel PBWT: first version, vertically parallel + reconcile [@wertenbroekExploitingParallelizationPositional2023] Long Matches and SMEMs 
-  + HB-parallel PBWT: last version, horizontally parallel [@tangHaplotypebasedParallelPBWT2025] Long Matches and SMEMs
+  + parallel PBWT (VCF/BCF): first version, vertically parallel + reconcile [@wertenbroekExploitingParallelizationPositional2023] Long Matches and SMEMs 
+  + HB-parallel PBWT (VCF?): last version, horizontally parallel [@tangHaplotypebasedParallelPBWT2025] Long Matches and SMEMs
     
     ---
   + mu-pbwt: [@cozziPBWTLightweightRindexing2023] Run-Lenght Encoded PBWT + MS and SMEMs against Query
@@ -104,6 +119,40 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
 - Run-Length encoding
 
 
+## List {.scrollable}
+
+Durbin's (Set maximal exact matches)
+
+- pbwt
+- graph-pbwt
+- mu-pbwt
+- d-pbwt
+- mc-pbwt
+- haplotype-based parallel pbwt (Naseri, zing zang sanahulla)
+- syllable-pbwt
+- tree consistent pbwt (tc-pbwt)
+- fast recomb
+- Data Structures for SMEM-Finding in the PBWT
+- Compressed Data Structures for Population-Scale Positional Burrows–Wheeler Transforms
+- multiallelic pbwt (zing, zang, sanahulla)
+- templated PBWT
+- FiMap PBWT
+
+
+ Compression
+- Durbin
+- CoMSA (gPBWT)
+- GTShark
+
+ Haplotype blocks
+- bi-pbwt
+- haploblocks (pbwt linear)
+
+
+ Haplotype blocks with wildcards
+- psmoother (pbwt, c++)
+- wild-pbwt (pbwt, c++)
+- wildhap (trie, java)
 
 
 ## References {.smaller}

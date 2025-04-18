@@ -10,7 +10,7 @@
   <meta name="generator" content="quarto-1.7.22">
 
   <meta name="author" content="Mattia S.">
-  <title>pbwt literature review</title>
+  <title>on the positional BWT</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
@@ -148,7 +148,7 @@
     <div class="slides">
 
 <section id="title-slide" class="quarto-title-block center">
-  <h1 class="title">pbwt literature review</h1>
+  <h1 class="title">on the positional BWT</h1>
 
 <div class="quarto-title-authors">
 <div class="quarto-title-author">
@@ -157,6 +157,83 @@ Mattia S.
 </div>
 </div>
 </div>
+
+</section>
+<section id="bf-pbwt-results" class="title-slide slide level1 center">
+<h1>bf-pbwt results</h1>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>BLIM timing(s)</th>
+<th>chr10(18gb)</th>
+<th>chr21(4.7gb)</th>
+<th>chr22(4.8)</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>2bfpbwt-bm on master</td>
+<td>690.53</td>
+<td>110.47</td>
+<td>116.99</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>2bfpbwt on (71a045a)</td>
+<td>294.98</td>
+<td>74.48</td>
+<td>75.54</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>2bfpbwt-bm on (hotfix)</td>
+<td>753.71</td>
+<td>108.56</td>
+<td>113.40</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>BLIM ram (GiB)</th>
+<th>chr10(18gb)</th>
+<th>chr21(4.7gb)</th>
+<th>chr22(4.8)</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>2bfpbwt-bm on master</td>
+<td>250</td>
+<td>82</td>
+<td>84</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>2bfpbwt on (71a045a)</td>
+<td>158</td>
+<td>43</td>
+<td>44</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>2bfpbwt-bm on (hotfix)</td>
+<td>244</td>
+<td>82</td>
+<td>84</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<section id="review" class="title-slide slide level1 center">
+<h1>REVIEW</h1>
 
 </section>
 <section id="basic-pbwt-durbinefficienthaplotypematching2014" class="slide level2">
@@ -205,8 +282,8 @@ Mattia S.
 <ul>
 <li><p>mc-PBWT: multi column (parallel?) scanning of the PBWT (double and triple) <span class="citation" data-cites="shakyaMcPBWTSpaceEfficientMulticolumn2022">[<a href="#/references" role="doc-biblioref" onclick="">3</a>]</span> used for “Matches of exact Lenght <span class="math inline">\(L\)</span></p>
 <hr></li>
-<li><p>parallel PBWT: first version, vertically parallel + reconcile <span class="citation" data-cites="wertenbroekExploitingParallelizationPositional2023">[<a href="#/references" role="doc-biblioref" onclick="">4</a>]</span> Long Matches and SMEMs</p></li>
-<li><p>HB-parallel PBWT: last version, horizontally parallel <span class="citation" data-cites="tangHaplotypebasedParallelPBWT2025">[<a href="#/references" role="doc-biblioref" onclick="">5</a>]</span> Long Matches and SMEMs</p>
+<li><p>parallel PBWT (VCF/BCF): first version, vertically parallel + reconcile <span class="citation" data-cites="wertenbroekExploitingParallelizationPositional2023">[<a href="#/references" role="doc-biblioref" onclick="">4</a>]</span> Long Matches and SMEMs</p></li>
+<li><p>HB-parallel PBWT (VCF?): last version, horizontally parallel <span class="citation" data-cites="tangHaplotypebasedParallelPBWT2025">[<a href="#/references" role="doc-biblioref" onclick="">5</a>]</span> Long Matches and SMEMs</p>
 <hr></li>
 <li><p>mu-pbwt: <span class="citation" data-cites="cozziPBWTLightweightRindexing2023">[<a href="#/references" role="doc-biblioref" onclick="">6</a>]</span> Run-Lenght Encoded PBWT + MS and SMEMs against Query</p></li>
 <li><p>syllable-PBWT: <span class="citation" data-cites="wangSyllablePBWTSpaceefficientHaplotype2023">[<a href="#/references" role="doc-biblioref" onclick="">7</a>]</span> Syllable-packed PBWT, hexadecimal every 4 bits.. Fanno solo Long Matches (query). Non fanno SMEMs, non fanno Blocchi. Handles only VCFs and not BCFs (comparazione con Cozzi’s mu-pbwt).</p></li>
@@ -236,6 +313,29 @@ Mattia S.
 <ul>
 <li>Run-Length encoding</li>
 </ul>
+</section>
+<section id="list" class="slide level2 scrollable">
+<h2>List</h2>
+<p>Durbin’s (Set maximal exact matches)</p>
+<ul>
+<li>pbwt</li>
+<li>graph-pbwt</li>
+<li>mu-pbwt</li>
+<li>d-pbwt</li>
+<li>mc-pbwt</li>
+<li>haplotype-based parallel pbwt (Naseri, zing zang sanahulla)</li>
+<li>syllable-pbwt</li>
+<li>tree consistent pbwt (tc-pbwt)</li>
+<li>fast recomb</li>
+<li>Data Structures for SMEM-Finding in the PBWT</li>
+<li>Compressed Data Structures for Population-Scale Positional Burrows–Wheeler Transforms</li>
+<li>multiallelic pbwt (zing, zang, sanahulla)</li>
+<li>templated PBWT</li>
+<li>FiMap PBWT</li>
+</ul>
+<p>Compression - Durbin - CoMSA (gPBWT) - GTShark</p>
+<p>Haplotype blocks - bi-pbwt - haploblocks (pbwt linear)</p>
+<p>Haplotype blocks with wildcards - psmoother (pbwt, c++) - wild-pbwt (pbwt, c++) - wildhap (trie, java)</p>
 </section>
 <section id="references" class="slide level2 smaller scrollable">
 <h2>References</h2>
@@ -290,7 +390,7 @@ Mattia S.
 </div>
 </div>
 
-</section>
+</section></section>
     </div>
   <div class="quarto-auto-generated-content" style="display: none;">
 <div class="footer footer-default">
