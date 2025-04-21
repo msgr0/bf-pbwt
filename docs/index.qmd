@@ -25,7 +25,7 @@ format:
 
 # REVIEW
 
-## Durbin's Original PBWT [https://github.com/richarddurbin/pbwt, @durbinEfficientHaplotypeMatching2014](https://github.com/richarddurbin/pbwt)
+## Durbin's Original PBWT [@durbinEfficientHaplotypeMatching2014] [git](https://github.com/richarddurbin/pbwt)
 
 **Input**:
 
@@ -64,7 +64,7 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
 
 1. Computing internal all-vs-all matches longer than $L$ and/or Maximal Perfect Haplotype Blocks (MPHB) 
  
-#### Tools
+#### Tools (long matches and SMEMs)
 + Durbin's pbwt [@durbinEfficientHaplotypeMatching2014] [git](https://github.com/richarddurbin/pbwt)
   + First Definition of PBWT
   + Reads VCF/BCF or .macs simulated data
@@ -82,6 +82,7 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
   + reads VCF
   + indexes and queries of patterns against Panel,
   + computes external **L-long matches**
+  + panel is stored as a `std::vector<std::vector<bool>>`
 
 + dynamic-mu-pbwt [@shakyaDynamicMPBWTDynamic2025] [git](https://github.com/ucfcbb/Dynamic-mu-PBWT)
   + dynamic + mu PBWT
@@ -90,9 +91,9 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
   + computes external **SMEMs** and **L-long matches** 
 
 
-+ PBWT-Query [@naseriEfficientHaplotypeMatching2019] [git](genome.ucf.edu/pbwt-query)
++ PBWT-Query [@naseriEfficientHaplotypeMatching2019] [git](http://genome.ucf.edu/pbwt-query)
   + Code is unaccesible, may read VCF
-  + Uses "Leap Arrays" to jump from differente $D$ values in $y^k$
+  + Uses "Leap Arrays" to jump from different $D$ values in $y^k$
   + Notes: several version of the algorithms are proposed
     + **PBWT-Query** memory extensive, panel in memory 
     + **L-PBWT-Query** memory mapped, panel lazy-loaded; uses Leap arrays
@@ -100,7 +101,8 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
   + computes external **L-long matches** 
 
 + syllable-PBWT [@wangSyllablePBWTSpaceefficientHaplotype2023] [git](https://github.com/ZhiGroup/Syllable-PBWT)
-  + syllable-encoding of the PBWT, 64 or 128 bits
+  + syllable-encoding of the PBWT, 64 or 128 bits 
+    + code: reading VCF encoded in `int` *syllables* [SyllableQuery.cpp](https://github.com/ZhiGroup/Syllable-PBWT/blob/master/SyllableQuery.cpp)
   + reads VCF
   + indexes and queries of patterns against Panel, parametrized by $B$ syllable length ($B=\{64, 128\}$) 
   + computes external **L-long matches** with $L \geq 2B$
@@ -108,40 +110,79 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
 
 
 + mc-PBWT: multi column (parallel?) scanning of the PBWT (double and triple) [@shakyaMcPBWTSpaceEfficientMulticolumn2022] used for "Matches of exact Lenght $L$
+  + seems NOT implemented ...
     
-+ parallel PBWT (VCF/BCF): first version, vertically parallel + reconcile [@wertenbroekExploitingParallelizationPositional2023] Long Matches and SMEMs 
++ parallel PBWT (VCF/BCF )[@wertenbroekExploitingParallelizationPositional2023] [git](https://github.com/rwk-unil/parallel_pbwt)
+  + first parallel version (implemented)
+    + vertically parallel + reconcile each $p$ thread
+  + computes **Long Matches** and **SMEMs** (compares against Durbin's pbwt)
+  + uses **htslib** (reads VCF/BCF)
+  + panel is read as  `std::vector<std:vector<bool>>`
+  + main code at [code](https://github.com/rwk-unil/parallel_pbwt/blob/main/pbwt_exp.hpp)
 
 + HB-parallel PBWT (VCF?): last version, horizontally parallel [@tangHaplotypebasedParallelPBWT2025] Long Matches and SMEMs
+  + no code perovided
+  + benchmarks are against [@wertenbroekExploitingParallelizationPositional2023] and Durbin's
+  + speed up only for very large Haplotype count (M size).
+
+
+#### Tools (Haplotype Blocks, internal Matches)
 
 + Trie-based Block Matching [@cunhaIdentifyingMaximalPerfect2018]
+  + implemnted in "Haploblocks" below as *trie* algorithm by Stoye
+  + Blocks are found in $O(MN^2)$
+  + Rows are encoded as arrays of `chars`
 
 + Haploblocks (PBWT-based block Matching) [@alankoFindingAllMaximal2020] [git](https://gitlab.com/bacazaux/haploblocks)
+  + Prefix and Divergence are stored as `longlongint`
+  + Panel is streamed by column from a text file of 0-1s representing the binary matrix
+    + the implementation may accepts a custom ordered alphabet with minor adjustments (0, 1, 2, 3, etc.)
+
 
 + Bi-directional PBWT [@naseriEfficientHaplotypeBlock2021] [git](https://github.com/ZhiGroup/bi-PBWT)
+  + Reads VCFs (no htslib)
+  + Block lengths defaults to 500k in WIDTH!!!, check on the paper the assumptions of such large blocks.
+  + Block haplotype count defaults to 100, check as above
+  + Computes blocks with GAPS (defaults is 1 column gap). Increasing this value may greatly affect performances 
+    + To test *normal* haplotype blocks, set the gap to 0
+  + Requires intermediate data to be writte on disk, about 4 times the VCF size (that's a lot!), encoding Prefix and Divergece with 4bytes(64bit ints) per value ...
 
 + WildHap (Trie-based \* block matching) [@williamsMaximalPerfectHaplotype2020] [git](williamsExtendingMaximalPerfect2020)
+  + Reads text file of 0-1s representing the binary matrix, plus \* gaps.
+  + Computes MPHBw; can be used to compute regular blocks given as input a binary matrix
+  + Trie base, written in Java.
 
 + Wild-pBWT (PBWT-based \* block matching) [@bonizzoniMultiallelicMaximalPerfect2023] [git](https://github.com/AlgoLab/Wild-pBWT)
+  + Reads text file of 0-1s representing the binary matrix, plus \* gaps.
+  + Computes MHBw; can be used to compute regular blocks given as input a binary matrix.
+  + Code is ready for multi-allelic PBWT (unlike [@alankoFindingAllMaximal2020])
 
-+ templated PBWT [@freymanFastRobustIdentitybyDescent2021] [git](https://github.com/23andMe/phasedibd)
 
 + psmoother [@yuePsmootherEfficientPBWT2022] [git](https://github.com/ZhiGroup/P-smoother)
+  + Reads VCF (no htslib)
+  + Extension of bi-PBWT. Finds blocks with gaps and the tries to *smoothe* the Panel, i.e. correcting the gapped columns to extend block matchs.
+  + Code is highly tangled with bi-PBWT, and uses in fact a bi-pBWT.
 
 
+#### Other papers on PBWT
+  - templated PBWT [@freymanFastRobustIdentitybyDescent2021] [git](https://github.com/23andMe/phasedibd)
+    - Uses *templates*, i.e. bit-masks to cover the input and compute *Long Matches* and *Blocks* with different Gaps and Masks.
+    - The computation of different templates is parallelized and intermediate data is saved to binary files (`uint8` for each allele).
+    - Written in Cython
+    - Compared against PBWT, RaPid, hap-IBD
 
-- tree consistent pbwt (tc-pbwt)
-- fast recomb
-- Data Structures for SMEM-Finding in the PBWT
-- Compressed Data Structures for Population-Scale Positional Burrows–Wheeler Transforms
-- multiallelic pbwt (zing, zang, sanahulla)
-- templated PBWT
-- FiMap PBWT
-
-
- Compression
-- Durbin
-- CoMSA (gPBWT)
-- GTShark
+  - tree consistent pbwt (tc-pbwt)
+  - fast recomb
+  - Data Structures for SMEM-Finding in the PBWT
+  - Compressed Data Structures for Population-Scale Positional Burrows–Wheeler Transforms
+  - multiallelic pbwt (zing, zang, sanahulla)
+  - FiMap: sparse linear algebra and random matrix algorithms to speed up IBD analysis
+  - hap-IBD (zhou): parallel PBWT for IBD segments, in JAVA. Reads VCF
+  - RaPID (naseri): reads vcf, uses PBWT and reconcile IBD segments; python 
+  - Compression
+    - Durbin
+    - CoMSA (gPBWT)
+    - GTShark
 
 
 ## References {.smaller}

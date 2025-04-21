@@ -191,8 +191,8 @@ window.Quarto = {
 </section>
 <section id="review" class="level1">
 <h1>REVIEW</h1>
-<section id="durbins-original-pbwt-httpsgithub.comricharddurbinpbwt-durbinefficienthaplotypematching2014" class="level2">
-<h2 class="anchored" data-anchor-id="durbins-original-pbwt-httpsgithub.comricharddurbinpbwt-durbinefficienthaplotypematching2014">Durbin’s Original PBWT <a href="https://github.com/richarddurbin/pbwt">https://github.com/richarddurbin/pbwt, <span class="citation" data-cites="durbinEfficientHaplotypeMatching2014">[<span>1</span>]</span></a></h2>
+<section id="durbins-original-pbwt-durbinefficienthaplotypematching2014-git" class="level2">
+<h2 class="anchored" data-anchor-id="durbins-original-pbwt-durbinefficienthaplotypematching2014-git">Durbin’s Original PBWT <span class="citation" data-cites="durbinEfficientHaplotypeMatching2014">[<a href="#ref-durbinEfficientHaplotypeMatching2014" role="doc-biblioref">1</a>]</span> <a href="https://github.com/richarddurbin/pbwt">git</a></h2>
 <p><strong>Input</strong>:</p>
 <p>a binary matrix <span class="math inline">\(X\)</span>, of <span class="math inline">\(m\)</span> rows and <span class="math inline">\(n\)</span> columns. <span class="math inline">\((\Sigma = \{0, 1\})\)</span>, where <span class="math inline">\(x_i\)</span> are haplotype sequences; <span class="math inline">\(0\leq i &lt; m\)</span> and <span class="math inline">\(x_i \in \Sigma^n\)</span></p>
 <p><strong>Output</strong>:</p>
@@ -221,41 +221,42 @@ window.Quarto = {
 </ul></li>
 <li>Computing internal all-vs-all matches longer than <span class="math inline">\(L\)</span> and/or Maximal Perfect Haplotype Blocks (MPHB)</li>
 </ol>
-<section id="tools" class="level4">
-<h4 class="anchored" data-anchor-id="tools">Tools</h4>
+<section id="tools-long-matches-and-smems" class="level4">
+<h4 class="anchored" data-anchor-id="tools-long-matches-and-smems">Tools (long matches and SMEMs)</h4>
 <ul>
-<li><p>Durbin’s pbwt <span class="citation" data-cites="durbinEfficientHaplotypeMatching2014">[<a href="#ref-durbinEfficientHaplotypeMatching2014" role="doc-biblioref">1</a>]</span> <a href="https://github.com/richarddurbin/pbwt">git</a></p>
+<li>Durbin’s pbwt <span class="citation" data-cites="durbinEfficientHaplotypeMatching2014">[<a href="#ref-durbinEfficientHaplotypeMatching2014" role="doc-biblioref">1</a>]</span> <a href="https://github.com/richarddurbin/pbwt">git</a>
 <ul>
 <li>First Definition of PBWT</li>
-<li>Reads VCF or .macs simulated data</li>
+<li>Reads VCF/BCF or .macs simulated data</li>
 <li>On-line computation</li>
 <li>Computes internal <strong>L-long</strong> matches, internal <strong>SMEMs</strong>, external (query) <strong>SMEMs</strong>.</li>
 </ul></li>
-<li><p>mu-pbwt <span class="citation" data-cites="cozziPBWTLightweightRindexing2023">[<a href="#ref-cozziPBWTLightweightRindexing2023" role="doc-biblioref">2</a>]</span> <a href="https://github.com/dlcgold/muPBWT">git</a></p>
+<li>mu-pbwt <span class="citation" data-cites="cozziPBWTLightweightRindexing2023">[<a href="#ref-cozziPBWTLightweightRindexing2023" role="doc-biblioref">2</a>]</span> <a href="https://github.com/dlcgold/muPBWT">git</a>
 <ul>
 <li>Run-Length encoding of the PBWT</li>
 <li>reads VCF/BCF</li>
 <li>indexes and queries of a pattern against the VCF</li>
 <li>computes external <strong>SMEMs</strong> and <strong>L-long matches</strong></li>
 </ul></li>
-<li><p>d-pbwt <span class="citation" data-cites="sanaullahDPBWTDynamicPositional2021">[<a href="#ref-sanaullahDPBWTDynamicPositional2021" role="doc-biblioref">3</a>]</span> <a href="http://genome.ucf.edu/d-PBWT/">git</a></p>
+<li>d-pbwt <span class="citation" data-cites="sanaullahDPBWTDynamicPositional2021">[<a href="#ref-sanaullahDPBWTDynamicPositional2021" role="doc-biblioref">3</a>]</span> <a href="http://genome.ucf.edu/d-PBWT/">git</a>
 <ul>
 <li>Dynamic pbwt to dynamically insert/delete reads</li>
 <li>reads VCF</li>
 <li>indexes and queries of patterns against Panel,</li>
 <li>computes external <strong>L-long matches</strong></li>
+<li>panel is stored as a <code>std::vector&lt;std::vector&lt;bool&gt;&gt;</code></li>
 </ul></li>
-<li><p>dynamic-mu-pbwt <span class="citation" data-cites="shakyaDynamicMPBWTDynamic2025">[<a href="#ref-shakyaDynamicMPBWTDynamic2025" role="doc-biblioref">4</a>]</span> <a href="https://github.com/ucfcbb/Dynamic-mu-PBWT">git</a></p>
+<li>dynamic-mu-pbwt <span class="citation" data-cites="shakyaDynamicMPBWTDynamic2025">[<a href="#ref-shakyaDynamicMPBWTDynamic2025" role="doc-biblioref">4</a>]</span> <a href="https://github.com/ucfcbb/Dynamic-mu-PBWT">git</a>
 <ul>
 <li>dynamic + mu PBWT</li>
 <li>reads VCF</li>
 <li>indexes and queries of patterns against Panel,</li>
 <li>computes external <strong>SMEMs</strong> and <strong>L-long matches</strong></li>
 </ul></li>
-<li><p>PBWT-Query <span class="citation" data-cites="naseriEfficientHaplotypeMatching2019">[<a href="#ref-naseriEfficientHaplotypeMatching2019" role="doc-biblioref">5</a>]</span> <a href="genome.ucf.edu/pbwt-query">git</a></p>
+<li>PBWT-Query <span class="citation" data-cites="naseriEfficientHaplotypeMatching2019">[<a href="#ref-naseriEfficientHaplotypeMatching2019" role="doc-biblioref">5</a>]</span> <a href="http://genome.ucf.edu/pbwt-query">git</a>
 <ul>
 <li>Code is unaccesible, may read VCF</li>
-<li>Uses “Leap Arrays” to jump from differente <span class="math inline">\(D\)</span> values in <span class="math inline">\(y^k\)</span></li>
+<li>Uses “Leap Arrays” to jump from different <span class="math inline">\(D\)</span> values in <span class="math inline">\(y^k\)</span></li>
 <li>Notes: several version of the algorithms are proposed
 <ul>
 <li><strong>PBWT-Query</strong> memory extensive, panel in memory</li>
@@ -264,33 +265,113 @@ window.Quarto = {
 </ul></li>
 <li>computes external <strong>L-long matches</strong></li>
 </ul></li>
-<li><p>syllable-PBWT <span class="citation" data-cites="wangSyllablePBWTSpaceefficientHaplotype2023">[<a href="#ref-wangSyllablePBWTSpaceefficientHaplotype2023" role="doc-biblioref">6</a>]</span> <a href="https://github.com/ZhiGroup/Syllable-PBWT">git</a></p>
+<li>syllable-PBWT <span class="citation" data-cites="wangSyllablePBWTSpaceefficientHaplotype2023">[<a href="#ref-wangSyllablePBWTSpaceefficientHaplotype2023" role="doc-biblioref">6</a>]</span> <a href="https://github.com/ZhiGroup/Syllable-PBWT">git</a>
 <ul>
-<li>syllable-encoding of the PBWT, 64 or 128 bits</li>
+<li>syllable-encoding of the PBWT, 64 or 128 bits
+<ul>
+<li>code: reading VCF encoded in <code>int</code> <em>syllables</em> <a href="https://github.com/ZhiGroup/Syllable-PBWT/blob/master/SyllableQuery.cpp">SyllableQuery.cpp</a></li>
+</ul></li>
 <li>reads VCF</li>
 <li>indexes and queries of patterns against Panel, parametrized by <span class="math inline">\(B\)</span> syllable length (<span class="math inline">\(B=\{64, 128\}\)</span>)</li>
 <li>computes external <strong>L-long matches</strong> with <span class="math inline">\(L \geq 2B\)</span></li>
 <li>notes: in the paper section (2.1) and Table 1, they write about “bit-PBWT” referring to the Durbin’s original PBWT used in PBWT-Query <span class="citation" data-cites="naseriEfficientHaplotypeMatching2019">[<a href="#ref-naseriEfficientHaplotypeMatching2019" role="doc-biblioref">5</a>]</span> and d-PBWT <span class="citation" data-cites="sanaullahDPBWTDynamicPositional2021">[<a href="#ref-sanaullahDPBWTDynamicPositional2021" role="doc-biblioref">3</a>]</span></li>
 </ul></li>
-<li><p>mc-PBWT: multi column (parallel?) scanning of the PBWT (double and triple) <span class="citation" data-cites="shakyaMcPBWTSpaceEfficientMulticolumn2022">[<a href="#ref-shakyaMcPBWTSpaceEfficientMulticolumn2022" role="doc-biblioref">7</a>]</span> used for “Matches of exact Lenght <span class="math inline">\(L\)</span></p></li>
-<li><p>parallel PBWT (VCF/BCF): first version, vertically parallel + reconcile <span class="citation" data-cites="wertenbroekExploitingParallelizationPositional2023">[<a href="#ref-wertenbroekExploitingParallelizationPositional2023" role="doc-biblioref">8</a>]</span> Long Matches and SMEMs</p></li>
-<li><p>HB-parallel PBWT (VCF?): last version, horizontally parallel <span class="citation" data-cites="tangHaplotypebasedParallelPBWT2025">[<a href="#ref-tangHaplotypebasedParallelPBWT2025" role="doc-biblioref">9</a>]</span> Long Matches and SMEMs</p></li>
-<li><p>Trie-based Block Matching <span class="citation" data-cites="cunhaIdentifyingMaximalPerfect2018">[<a href="#ref-cunhaIdentifyingMaximalPerfect2018" role="doc-biblioref">10</a>]</span></p></li>
-<li><p>Haploblocks (PBWT-based block Matching) <span class="citation" data-cites="alankoFindingAllMaximal2020">[<a href="#ref-alankoFindingAllMaximal2020" role="doc-biblioref">11</a>]</span> <a href="https://gitlab.com/bacazaux/haploblocks">git</a></p></li>
-<li><p>Bi-directional PBWT <span class="citation" data-cites="naseriEfficientHaplotypeBlock2021">[<a href="#ref-naseriEfficientHaplotypeBlock2021" role="doc-biblioref">12</a>]</span> <a href="https://github.com/ZhiGroup/bi-PBWT">git</a></p></li>
-<li><p>WildHap (Trie-based * block matching) <span class="citation" data-cites="williamsMaximalPerfectHaplotype2020">[<a href="#ref-williamsMaximalPerfectHaplotype2020" role="doc-biblioref">13</a>]</span> <a href="williamsExtendingMaximalPerfect2020">git</a></p></li>
-<li><p>Wild-pBWT (PBWT-based * block matching) <span class="citation" data-cites="bonizzoniMultiallelicMaximalPerfect2023">[<a href="#ref-bonizzoniMultiallelicMaximalPerfect2023" role="doc-biblioref">14</a>]</span> <a href="https://github.com/AlgoLab/Wild-pBWT">git</a></p></li>
-<li><p>templated PBWT <span class="citation" data-cites="freymanFastRobustIdentitybyDescent2021">[<a href="#ref-freymanFastRobustIdentitybyDescent2021" role="doc-biblioref">15</a>]</span> <a href="https://github.com/23andMe/phasedibd">git</a></p></li>
-<li><p>psmoother <span class="citation" data-cites="yuePsmootherEfficientPBWT2022">[<a href="#ref-yuePsmootherEfficientPBWT2022" role="doc-biblioref">16</a>]</span> <a href="https://github.com/ZhiGroup/P-smoother">git</a></p></li>
-<li><p>tree consistent pbwt (tc-pbwt)</p></li>
-<li><p>fast recomb</p></li>
-<li><p>Data Structures for SMEM-Finding in the PBWT</p></li>
-<li><p>Compressed Data Structures for Population-Scale Positional Burrows–Wheeler Transforms</p></li>
-<li><p>multiallelic pbwt (zing, zang, sanahulla)</p></li>
-<li><p>templated PBWT</p></li>
-<li><p>FiMap PBWT</p></li>
+<li>mc-PBWT: multi column (parallel?) scanning of the PBWT (double and triple) <span class="citation" data-cites="shakyaMcPBWTSpaceEfficientMulticolumn2022">[<a href="#ref-shakyaMcPBWTSpaceEfficientMulticolumn2022" role="doc-biblioref">7</a>]</span> used for “Matches of exact Lenght <span class="math inline">\(L\)</span>
+<ul>
+<li>seems NOT implemented …</li>
+</ul></li>
+<li>parallel PBWT (VCF/BCF )<span class="citation" data-cites="wertenbroekExploitingParallelizationPositional2023">[<a href="#ref-wertenbroekExploitingParallelizationPositional2023" role="doc-biblioref">8</a>]</span> <a href="https://github.com/rwk-unil/parallel_pbwt">git</a>
+<ul>
+<li>first parallel version (implemented)
+<ul>
+<li>vertically parallel + reconcile each <span class="math inline">\(p\)</span> thread</li>
+</ul></li>
+<li>computes <strong>Long Matches</strong> and <strong>SMEMs</strong> (compares against Durbin’s pbwt)</li>
+<li>uses <strong>htslib</strong> (reads VCF/BCF)</li>
+<li>panel is read as <code>std::vector&lt;std:vector&lt;bool&gt;&gt;</code></li>
+<li>main code at <a href="https://github.com/rwk-unil/parallel_pbwt/blob/main/pbwt_exp.hpp">code</a></li>
+</ul></li>
+<li>HB-parallel PBWT (VCF?): last version, horizontally parallel <span class="citation" data-cites="tangHaplotypebasedParallelPBWT2025">[<a href="#ref-tangHaplotypebasedParallelPBWT2025" role="doc-biblioref">9</a>]</span> Long Matches and SMEMs
+<ul>
+<li>no code perovided</li>
+<li>benchmarks are against <span class="citation" data-cites="wertenbroekExploitingParallelizationPositional2023">[<a href="#ref-wertenbroekExploitingParallelizationPositional2023" role="doc-biblioref">8</a>]</span> and Durbin’s</li>
+<li>speed up only for very large Haplotype count (M size).</li>
+</ul></li>
 </ul>
-<p>Compression - Durbin - CoMSA (gPBWT) - GTShark</p>
+</section>
+<section id="tools-haplotype-blocks-internal-matches" class="level4">
+<h4 class="anchored" data-anchor-id="tools-haplotype-blocks-internal-matches">Tools (Haplotype Blocks, internal Matches)</h4>
+<ul>
+<li>Trie-based Block Matching <span class="citation" data-cites="cunhaIdentifyingMaximalPerfect2018">[<a href="#ref-cunhaIdentifyingMaximalPerfect2018" role="doc-biblioref">10</a>]</span>
+<ul>
+<li>implemnted in “Haploblocks” below as <em>trie</em> algorithm by Stoye</li>
+<li>Blocks are found in <span class="math inline">\(O(MN^2)\)</span></li>
+<li>Rows are encoded as arrays of <code>chars</code></li>
+</ul></li>
+<li>Haploblocks (PBWT-based block Matching) <span class="citation" data-cites="alankoFindingAllMaximal2020">[<a href="#ref-alankoFindingAllMaximal2020" role="doc-biblioref">11</a>]</span> <a href="https://gitlab.com/bacazaux/haploblocks">git</a>
+<ul>
+<li>Prefix and Divergence are stored as <code>longlongint</code></li>
+<li>Panel is streamed by column from a text file of 0-1s representing the binary matrix
+<ul>
+<li>the implementation may accepts a custom ordered alphabet with minor adjustments (0, 1, 2, 3, etc.)</li>
+</ul></li>
+</ul></li>
+<li>Bi-directional PBWT <span class="citation" data-cites="naseriEfficientHaplotypeBlock2021">[<a href="#ref-naseriEfficientHaplotypeBlock2021" role="doc-biblioref">12</a>]</span> <a href="https://github.com/ZhiGroup/bi-PBWT">git</a>
+<ul>
+<li>Reads VCFs (no htslib)</li>
+<li>Block lengths defaults to 500k in WIDTH!!!, check on the paper the assumptions of such large blocks.</li>
+<li>Block haplotype count defaults to 100, check as above</li>
+<li>Computes blocks with GAPS (defaults is 1 column gap). Increasing this value may greatly affect performances
+<ul>
+<li>To test <em>normal</em> haplotype blocks, set the gap to 0</li>
+</ul></li>
+<li>Requires intermediate data to be writte on disk, about 4 times the VCF size (that’s a lot!), encoding Prefix and Divergece with 4bytes(64bit ints) per value …</li>
+</ul></li>
+<li>WildHap (Trie-based * block matching) <span class="citation" data-cites="williamsMaximalPerfectHaplotype2020">[<a href="#ref-williamsMaximalPerfectHaplotype2020" role="doc-biblioref">13</a>]</span> <a href="williamsExtendingMaximalPerfect2020">git</a>
+<ul>
+<li>Reads text file of 0-1s representing the binary matrix, plus * gaps.</li>
+<li>Computes MPHBw; can be used to compute regular blocks given as input a binary matrix</li>
+<li>Trie base, written in Java.</li>
+</ul></li>
+<li>Wild-pBWT (PBWT-based * block matching) <span class="citation" data-cites="bonizzoniMultiallelicMaximalPerfect2023">[<a href="#ref-bonizzoniMultiallelicMaximalPerfect2023" role="doc-biblioref">14</a>]</span> <a href="https://github.com/AlgoLab/Wild-pBWT">git</a>
+<ul>
+<li>Reads text file of 0-1s representing the binary matrix, plus * gaps.</li>
+<li>Computes MHBw; can be used to compute regular blocks given as input a binary matrix.</li>
+<li>Code is ready for multi-allelic PBWT (unlike <span class="citation" data-cites="alankoFindingAllMaximal2020">[<a href="#ref-alankoFindingAllMaximal2020" role="doc-biblioref">11</a>]</span>)</li>
+</ul></li>
+<li>psmoother <span class="citation" data-cites="yuePsmootherEfficientPBWT2022">[<a href="#ref-yuePsmootherEfficientPBWT2022" role="doc-biblioref">15</a>]</span> <a href="https://github.com/ZhiGroup/P-smoother">git</a>
+<ul>
+<li>Reads VCF (no htslib)</li>
+<li>Extension of bi-PBWT. Finds blocks with gaps and the tries to <em>smoothe</em> the Panel, i.e.&nbsp;correcting the gapped columns to extend block matchs.</li>
+<li>Code is highly tangled with bi-PBWT, and uses in fact a bi-pBWT.</li>
+</ul></li>
+</ul>
+</section>
+<section id="other-papers-on-pbwt" class="level4">
+<h4 class="anchored" data-anchor-id="other-papers-on-pbwt">Other papers on PBWT</h4>
+<ul>
+<li>templated PBWT <span class="citation" data-cites="freymanFastRobustIdentitybyDescent2021">[<a href="#ref-freymanFastRobustIdentitybyDescent2021" role="doc-biblioref">16</a>]</span> <a href="https://github.com/23andMe/phasedibd">git</a>
+<ul>
+<li>Uses <em>templates</em>, i.e.&nbsp;bit-masks to cover the input and compute <em>Long Matches</em> and <em>Blocks</em> with different Gaps and Masks.</li>
+<li>The computation of different templates is parallelized and intermediate data is saved to binary files (<code>uint8</code> for each allele).</li>
+<li>Written in Cython</li>
+<li>Compared against PBWT, RaPid, hap-IBD</li>
+</ul></li>
+<li>tree consistent pbwt (tc-pbwt)</li>
+<li>fast recomb</li>
+<li>Data Structures for SMEM-Finding in the PBWT</li>
+<li>Compressed Data Structures for Population-Scale Positional Burrows–Wheeler Transforms</li>
+<li>multiallelic pbwt (zing, zang, sanahulla)</li>
+<li>FiMap: sparse linear algebra and random matrix algorithms to speed up IBD analysis</li>
+<li>hap-IBD (zhou): parallel PBWT for IBD segments, in JAVA. Reads VCF</li>
+<li>RaPID (naseri): reads vcf, uses PBWT and reconcile IBD segments; python</li>
+<li>Compression
+<ul>
+<li>Durbin</li>
+<li>CoMSA (gPBWT)</li>
+<li>GTShark</li>
+</ul></li>
+</ul>
 </section>
 </section>
 <section id="references" class="level2 smaller">
@@ -338,11 +419,11 @@ window.Quarto = {
 <div id="ref-bonizzoniMultiallelicMaximalPerfect2023" class="csl-entry" role="listitem">
 <div class="csl-left-margin">14. </div><div class="csl-right-inline">Bonizzoni P, Della Vedova G, Pirola Y, Rizzi R, Sgrò M (2023) <a href="https://doi.org/10.1007/978-3-031-34953-9_5">Multiallelic <span>Maximal Perfect Haplotype Blocks</span> with <span>Wildcards</span> via <span>PBWT</span></a>. In: Rojas I, Valenzuela O, Rojas Ruiz F, Herrera LJ, Ortuño F (eds) Bioinformatics and <span>Biomedical Engineering</span>. Springer Nature Switzerland, Cham, pp 62–76</div>
 </div>
-<div id="ref-freymanFastRobustIdentitybyDescent2021" class="csl-entry" role="listitem">
-<div class="csl-left-margin">15. </div><div class="csl-right-inline">Freyman WA, McManus KF, Shringarpure SS, et al (2021) Fast and <span class="nocase">Robust Identity-by-Descent Inference</span> with the <span>Templated Positional Burrows</span>–<span>Wheeler Transform</span>. Molecular Biology and Evolution 38(5):2131–2151. <a href="https://doi.org/10.1093/molbev/msaa328">https://doi.org/10.1093/molbev/msaa328</a></div>
-</div>
 <div id="ref-yuePsmootherEfficientPBWT2022" class="csl-entry" role="listitem">
-<div class="csl-left-margin">16. </div><div class="csl-right-inline">Yue W, Naseri A, Wang V, Shakya P, Zhang S, Zhi D (2022) P-smoother: Efficient <span>PBWT</span> smoothing of large haplotype panels. Bioinformatics Advances 2(1):vbac045. <a href="https://doi.org/10.1093/bioadv/vbac045">https://doi.org/10.1093/bioadv/vbac045</a></div>
+<div class="csl-left-margin">15. </div><div class="csl-right-inline">Yue W, Naseri A, Wang V, Shakya P, Zhang S, Zhi D (2022) P-smoother: Efficient <span>PBWT</span> smoothing of large haplotype panels. Bioinformatics Advances 2(1):vbac045. <a href="https://doi.org/10.1093/bioadv/vbac045">https://doi.org/10.1093/bioadv/vbac045</a></div>
+</div>
+<div id="ref-freymanFastRobustIdentitybyDescent2021" class="csl-entry" role="listitem">
+<div class="csl-left-margin">16. </div><div class="csl-right-inline">Freyman WA, McManus KF, Shringarpure SS, et al (2021) Fast and <span class="nocase">Robust Identity-by-Descent Inference</span> with the <span>Templated Positional Burrows</span>–<span>Wheeler Transform</span>. Molecular Biology and Evolution 38(5):2131–2151. <a href="https://doi.org/10.1093/molbev/msaa328">https://doi.org/10.1093/molbev/msaa328</a></div>
 </div>
 </div>
 </section>
