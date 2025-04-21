@@ -67,7 +67,7 @@ performing some other computation on each $\texttt{PBWT}$ before it is discarded
 #### Tools
 + Durbin's pbwt [@durbinEfficientHaplotypeMatching2014] [git](https://github.com/richarddurbin/pbwt)
   + First Definition of PBWT
-  + Reads VCF or .macs simulated data
+  + Reads VCF/BCF or .macs simulated data
   + On-line computation
   + Computes internal **L-long** matches, internal **SMEMs**, external (query) **SMEMs**.
 
