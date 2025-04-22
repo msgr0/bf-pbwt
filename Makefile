@@ -28,7 +28,6 @@ debug: CFLAGS=-O0 -g
 %.o: %.c %.h
 	${CC} -c ${CFLAGS} ${CCINCL} $< -o $@
 
-
 2bfpbwt-bm: CCINCL=${LIBOMP_INCL}
 2bfpbwt-bm: 2bfpbwt.c iobm.o
 	${CC} -o $@ ${CFLAGS} -DBF2IOMODE_BM ${CCINCL} $(LDFLAGS) $^ 

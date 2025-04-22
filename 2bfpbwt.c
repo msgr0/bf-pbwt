@@ -389,8 +389,9 @@ static pbwtad *cpbwtk(size_t n, uint8_t *restrict c, pbwtad *restrict p,
     fprintf(stderr, format, ##args);                                           \
   } while (0)
 
-#define DPARR(n, a, fmt)                                                       \
+#define DPARR(n, a, fmt, ...)                                                  \
   do {                                                                         \
+    __VA_OPT__(fprintf(stderr, __VA_ARGS__);)                                  \
     for (int parr_i__ = 0; parr_i__ < (n); parr_i__++) {                       \
       fprintf(stderr, (fmt), (a)[parr_i__]);                                   \
     }                                                                          \
@@ -536,7 +537,6 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
     mbfgetcoln(fin, nrow, c0, ncol);
     pl[j] = cpbwt(nrow, c0, pl[j - 1]);
   }
-  fputc(0xA, stdout);
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
@@ -556,6 +556,7 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol,
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
+  memset(pb, 0, ncol * sizeof(pbwtad *));
 
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
@@ -577,6 +578,7 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol,
   }
 
   uint8_t *c0 = NULL;
+
   switch (lastmode) {
   case APPROX_MODE_LAST_LIN:
     c0 = malloc(nrow * sizeof *c0);
@@ -587,10 +589,16 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol,
     FREE(c0);
     break;
   case APPROX_MODE_LAST_WINDOW:
+#if defined(BF2IOMODE_BM)
     j *= W;
     fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
-    pbwtad *ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
+#elif defined(BF2IOMODE_BCF)
+    fgetcoliw64r(fin, j, nrow, pw, ncol);
+    j *= W;
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
+    pbwtad *ps = pbwtad_new(nrow);
     pb[ncol - 1] = ps;
     memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
     rrsortx(nrow, pw, ps->a, aux);
@@ -600,10 +608,11 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol,
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
-    DPRINT("ars %3zu: ", j);
-    if (pb[j])
-      DPARR(nrow, pb[j]->a, "%zu ");
-    else
+    DPRINT("ars %3zu: [%p]", j, pb[j]);
+    if (pb[j]) {
+      DPARR(nrow, pb[j]->a, "%zu ", "\n - ");
+      DPARR(nrow, pb[j]->d, "%zu ", " - ");
+    } else
       DPRINT(" ---\n");
   }
 #endif
@@ -881,6 +890,13 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
     p0->a[j] = j;
     p0->d[j] = 0;
   }
+#ifdef BF2IOMODE_BCF
+  void *_tfin = fin;
+  bcf_srs_t *_sr = bcf_sr_init();
+  bcf_sr_add_reader(_sr, ((bcf_srs_t *)fin)->readers[0].fname);
+  fin = _sr;
+#endif
+
   fgetcoli(fin, 0, nrow, c0, ncol);
   pb[0] = cpbwt_0(nrow, c0, p0);
   PBWTAD_FREE(p0);
@@ -890,6 +906,10 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
     pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
   }
 
+#ifdef BF2IOMODE_BCF
+  bcf_sr_destroy(_sr);
+  fin = _tfin;
+#endif
   uint64_t *pw0 = malloc(nrow * sizeof *pw0);
   uint64_t *pw1 = malloc(nrow * sizeof *pw1);
   size_t *aux = malloc(nrow * sizeof *aux);
@@ -923,10 +943,15 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   }
 
   for (j = j * W; j < ncol; j++) {
+#if defined(BF2IOMODE_BM)
     fgetcoli(fin, j, nrow, c0, ncol);
+#elif defined(BF2IOMODE_BCF)
+    fgetcoli(fin, j, nrow, c0, 0);
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
     pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
   }
-  fputc(0xA, stderr);
 
 #if 0
   for (size_t j = 0; j < ncol; j++) {
