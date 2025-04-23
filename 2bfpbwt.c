@@ -588,7 +588,7 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
 
   uint8_t *c0 = NULL;
 
-#if defined(BF2IOMODE_BM)
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
   j *= W;
   fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
 #elif defined(BF2IOMODE_BCF)
@@ -849,7 +849,7 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   }
 
   for (j = j * W; j < ncol; j++) {
-#if defined(BF2IOMODE_BM)
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
     fgetcoli(fin, j, nrow, c0, 0);
@@ -1087,7 +1087,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-#if defined(BF2IOMODE_BM)
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
   FILE *fin = fopen(argv[2], "r");
   int fd = open(argv[2], O_RDONLY);
   if (!fin) {
