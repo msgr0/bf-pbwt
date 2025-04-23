@@ -50,6 +50,23 @@ uint8_t DO_DUMP = 0;
       }                                                                        \
     }                                                                          \
   } while (0)
+#define PDUMP_SEQ_OFFSET(s, e, p, offset)                                      \
+  do {                                                                         \
+    for (size_t pdump_ix__ = (s); pdump_ix__ < (e); pdump_ix__++) {            \
+      if (DO_DUMP) {                                                           \
+        printf("%zu:", (size_t)(offset) + (size_t)(pdump_ix__));               \
+        size_t pdump_j__;                                                      \
+        for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                 \
+          printf("%zu ", (p)[pdump_ix__]->a[pdump_j__]);                       \
+        printf("%zu", (p)[pdump_ix__]->a[pdump_j__]);                          \
+        fputc('|', stdout);                                                    \
+        for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                 \
+          printf("%zu ", (p)[pdump_ix__]->d[pdump_j__]);                       \
+        printf("%zu", (p)[pdump_ix__]->d[pdump_j__]);                          \
+        fputc(0xA, stdout);                                                    \
+      }                                                                        \
+    }                                                                          \
+  } while (0)
 #else
 #define PDUMP(p)
 #define PDUMP_SEQ(s, e, p)
@@ -364,7 +381,8 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   return ret;
 }
 
-static int cpbwti(size_t n, uint8_t *restrict c, pbwtad *restrict pp, pbwtad *restrict pc) {
+static int cpbwti(size_t n, uint8_t *restrict c, pbwtad *restrict pp,
+                  pbwtad *restrict pc) {
   static size_t *o = NULL;
   static size_t *h = NULL;
   static size_t k = 1;
@@ -393,8 +411,8 @@ static int cpbwti(size_t n, uint8_t *restrict c, pbwtad *restrict pp, pbwtad *re
 
     f &= -mask;       // f = 0 if mask == 0, unchanged if mask == 1
     g &= -(1 - mask); // g = 0 if mask == 1, unchanged if mask == 0
-    q += mask;     // Increment q if mask is 1
-    r += mask ^ 1; // Increment r if mask is 0
+    q += mask;        // Increment q if mask is 1
+    r += mask ^ 1;    // Increment r if mask is 0
   }
 
   memcpy(pc->a + r, o, q * sizeof(size_t));
@@ -809,10 +827,9 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol) {
 }
 
 pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
-
-  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
+  // NOTE: here it is necessary to keep in memory the entire windows
+  pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb1 = malloc(W * sizeof(pbwtad *));
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
@@ -827,14 +844,14 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
 #endif
 
   fgetcoli(fin, 0, nrow, c0, ncol);
-  pb[0] = cpbwt_0(nrow, c0, p0);
-  PDUMP(0, pb[0]);
+  pb0[0] = cpbwt(nrow, c0, p0);
+  PDUMP(0, pb0[0]);
   PBWTAD_FREE(p0);
 
   for (int j = 1; j < W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    PDUMP(j, pb[j]);
+    pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
+    PDUMP(j, pb0[j]);
   }
 
 #ifdef BF2IOMODE_BCF
@@ -846,48 +863,68 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   size_t *aux = malloc(nrow * sizeof *aux);
   fgetcoliw64r(fin, 0, nrow, pw0, ncol);
 
-  size_t j;
+  // pb0 is now filled with computed values,
+  // to allow reusing I need to fill pb1 with empty values
+  for (int j = 0; j < W; j++) {
+    pb1[j] = pbwtad_new(nrow);
+  }
 
+  size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    pbwtad *ps = pbwtad_new(nrow);
-    pb[W * (j + 1) - 1] = ps;
-    memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
+    pbwtad *ps = pb1[W - 1];
+    // pb0[W * (j + 1) - 1] = ps;
+    // memcpy(ps->a, pb0[W * j - 1]->a, nrow * sizeof *(ps->a));
+    memcpy(ps->a, pb0[W - 1]->a, nrow * sizeof *(ps->a));
     fgetcoliw64r(fin, j, nrow, pw1, ncol);
     rrsortx(nrow, pw1, ps->a, aux);
 
-#pragma omp parallel for shared(pw1, pw0, pb, j)
+#pragma omp parallel for shared(pw1, pw0, pb0, pb1, j)
     for (size_t x = 1; x < W; x++) {
       uint64_t *w = malloc(nrow * sizeof *w);
-      size_t J = W * (j + 1) - 1;
+      // size_t J = W * (j + 1) - 1;
+      size_t J = W - 1;
 
       wr64mrgsi(nrow, pw1, pw0, w, x);
-      pbwtad *ps = pbwtad_new(nrow);
-      pb[J - x] = ps;
-      memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
+      // pbwtad *ps = pbwtad_new(nrow);
+      pbwtad *ps = pb1[J - x];
+      // pb0[J - x] = ps;
+      memcpy(ps->a, pb0[J - x]->a, nrow * sizeof *(ps->a));
       rrsortx_noaux(nrow, w, ps->a);
       FREE(w);
     }
-    PDUMP_SEQ(W * j - 1, W * (j + 1) - 1, pb);
+    PDUMP_SEQ_OFFSET(0, W, pb1, W * j - 1);
     SWAP(pw0, pw1);
+    SWAP(pb0, pb1);
   }
 
+  pbwtad *pp0, *pp1;
+  pp0 = pb0[W - 1];
+  pp1 = pb0[W - 2];
   for (j = j * W; j < ncol; j++) {
 #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
-    fgetcoli(fin, j, nrow, c0, 0);
+    fgetcoli(fin, j, nrow, c0, 3);
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
-    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    PDUMP(j, pb[j]);
+    cpbwti(nrow, c0, pp0, pp1);
+    PDUMP(j, pp1);
+    SWAP(pp0, pp1);
   }
 
+  return NULL;
+  for (int j = 0; j < W; j++) {
+    PBWTAD_FREE(pb0[j]);
+    PBWTAD_FREE(pb1[j]);
+  }
+  FREE(pb0);
+  FREE(pb1);
   FREE(pw0);
   FREE(pw1);
   FREE(aux);
   FREE(c0);
-  return pb;
+  return NULL;
 }
 pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
