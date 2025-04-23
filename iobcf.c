@@ -88,7 +88,9 @@ void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
 void bfgetcoln(void *fd, size_t n, uint8_t *restrict c, size_t nc) {
   // NOTE: nc is not used here.
   bcf_srs_t *sr = fd;
-  bcf_hdr_t *hdr = sr->readers[0].header;
+  static bcf_hdr_t *hdr = NULL;
+  if (!hdr)
+    hdr = sr->readers[0].header;
 
   static size_t bufn = BFGETCOLI_BUF_SIZE;
   static uint8_t *buf = NULL;
@@ -113,6 +115,7 @@ void bfgetcoln(void *fd, size_t n, uint8_t *restrict c, size_t nc) {
         IOBCF_WELLFORMED_CHECK(ptr[1]);
         buf[r * n + 2 * i + 1] = bcf_gt_allele(ptr[1]);
       }
+      free(gt_arr);
     }
     bufn = 0;
   }
@@ -146,7 +149,9 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
   void fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *restrict c,     \
                        size_t nc) {                                            \
     bcf_srs_t *sr = fd;                                                        \
-    bcf_hdr_t *hdr = sr->readers[0].header;                                    \
+    static bcf_hdr_t *hdr = NULL;                                              \
+    if (!hdr)                                                                  \
+      hdr = sr->readers[0].header;                                             \
                                                                                \
     static ssize_t _li = -1;                                                   \
     if (i == _li + 1) {                                                        \
@@ -166,6 +171,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
           IOBCF_WELLFORMED_CHECK(ptr[1]);                                      \
           c[2 * i + 1] |= ((uint64_t)bcf_gt_allele(ptr[1]) << wix);            \
         }                                                                      \
+        free(gt_arr);                                                          \
       }                                                                        \
     } else {                                                                   \
       errno = EPERM;                                                           \
@@ -209,7 +215,9 @@ void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                  uint8_t w) {
   // NOTE: nc is not used here.
   bcf_srs_t *sr = fd;
-  bcf_hdr_t *hdr = sr->readers[0].header;
+  static bcf_hdr_t *hdr = NULL;
+  if (!hdr)
+    hdr = sr->readers[0].header;
 
   static ssize_t _li = -1;
   // NOTE: Same trickery here as in `fgetcoli`, however
@@ -217,11 +225,9 @@ void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   // Current BCF row is (_li * w)
   if (i == _li + 1) {
     memset(c, 0, n * sizeof *c);
-    // this check should not be necessary
     for (size_t wix = 0; wix < w; wix++) {
-      // printf("wix:%zu\n", wix);
       if (!bcf_sr_next_line(sr))
-        exit(124);
+        return;
       bcf1_t *line = bcf_sr_get_line(sr, 0);
       int32_t *gt_arr = NULL, ngt_arr = 0;
       int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
@@ -236,6 +242,7 @@ void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
         IOBCF_WELLFORMED_CHECK(ptr[1]);
         c[2 * i + 1] |= ((uint64_t)bcf_gt_allele(ptr[1]) << wix);
       }
+      free(gt_arr);
     }
   } else {
     // WARN: this does not work, at the moment.
