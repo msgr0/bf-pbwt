@@ -454,35 +454,24 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
   if (!pl)
     return NULL;
 
-  pbwtad *p0 = malloc(sizeof *p0);
-  p0->a = malloc(nrow * sizeof *(p0->a));
-  p0->d = malloc(nrow * sizeof *(p0->d));
+  pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
     p0->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
-  pl[0] = cpbwtk(nrow, c0, p0, 1);
+  // pl[0] = cpbwtk(nrow, c0, p0, 1);
+  pl[0] = cpbwt(nrow, c0, p0);
   PDUMP(0, p0);
-  FREE(p0->a);
-  FREE(p0->d);
-  FREE(p0);
+  PBWTAD_FREE(p0);
 
   for (size_t j = 1; j < ncol; j++) {
-    /*fprintf(stderr, "\r%10zu/%zu", j + 1, ncol);*/
     fgetcoli(fin, j, nrow, c0, ncol);
-    pl[j] = cpbwtk(nrow, c0, pl[j - 1], j + 1);
+    // pl[j] = cpbwtk(nrow, c0, pl[j - 1], j + 1);
+    pl[j] = cpbwt(nrow, c0, pl[j - 1]);
     PDUMP(j, pl[j]);
   }
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    /*DPRINT("lin %3zu: ", j);*/
-    DPRINT("%3zu: ", j);
-    DPARR(nrow, pl[j]->a, "%zu ");
-    DPARR(nrow, pl[j]->d, "%zu ");
-  }
-#endif
   FREE(c0);
   FREE(o);
   FREE(z);
@@ -512,14 +501,6 @@ pbwtad **blinc(void *fin, size_t nrow, size_t ncol) {
     PDUMP(j, pl[j]);
   }
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    /*DPRINT("bli %3zu: ", j);*/
-    DPRINT("%3zu: ", j);
-    DPARR(nrow, pl[j]->a, "%zu ");
-    DPARR(nrow, pl[j]->d, "%zu ");
-  }
-#endif
   FREE(c0);
   return pl;
 }
@@ -547,15 +528,6 @@ pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
     PDUMP(j, pl[j]);
   }
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    /*DPRINT("bli %3zu(%p): ", j, pl[j]);*/
-    DPRINT("%3zu(%p): ", j, pl[j]->a);
-    DPARR(nrow, pl[j]->a, "%zu ");
-    DPARR(nrow, pl[j]->d, "%zu ");
-  }
-  DPRINT("\n");
-#endif
   FREE(c0);
   return pl;
 }
@@ -584,21 +556,11 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
     PDUMP(j, pl[j]);
   }
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    /*DPRINT("bli %3zu(%p): ", j, pl[j]);*/
-    DPRINT("%3zu(%p): ", j, pl[j]->a);
-    DPARR(nrow, pl[j]->a, "%zu ");
-  }
-  DPRINT("\n");
-#endif
   FREE(c0);
   return pl;
 }
 
-typedef enum { APPROX_MODE_LAST_WINDOW, APPROX_MODE_LAST_LIN } APPROX_MODE;
-pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol,
-                      APPROX_MODE lastmode) {
+pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
@@ -616,7 +578,6 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol,
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    /*fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);*/
     pbwtad *ps = pbwtad_new(nrow);
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
@@ -627,49 +588,27 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol,
 
   uint8_t *c0 = NULL;
 
-  switch (lastmode) {
-  case APPROX_MODE_LAST_LIN:
-    c0 = malloc(nrow * sizeof *c0);
-    for (j = j * W; j < ncol; j++) {
-      fgetcoli(fin, j, nrow, c0, ncol);
-      pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    }
-    FREE(c0);
-    break;
-  case APPROX_MODE_LAST_WINDOW:
 #if defined(BF2IOMODE_BM)
-    j *= W;
-    fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
+  j *= W;
+  fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
 #elif defined(BF2IOMODE_BCF)
-    fgetcoliw64r(fin, j, nrow, pw, ncol);
-    j *= W;
+  fgetcoliw64r(fin, j, nrow, pw, ncol);
+  j *= W;
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
-    pbwtad *ps = pbwtad_new(nrow);
-    pb[ncol - 1] = ps;
-    memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
-    rrsortx(nrow, pw, ps->a, aux);
-    PDUMP(ncol - 1, ps);
-    break;
-  }
-  fputc(0xA, stderr);
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    DPRINT("ars %3zu: [%p]", j, pb[j]);
-    if (pb[j]) {
-      DPARR(nrow, pb[j]->a, "%zu ", "\n - ");
-      DPARR(nrow, pb[j]->d, "%zu ", " - ");
-    } else
-      DPRINT(" ---\n");
-  }
-#endif
+  // last column needs special handling, since it is < W
+  ps = pbwtad_new(nrow);
+  pb[ncol - 1] = ps;
+  memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
+  rrsortx(nrow, pw, ps->a, aux);
+  PDUMP(ncol - 1, ps);
+
   FREE(c0);
   return pb;
 }
-pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol,
-                       APPROX_MODE lastmode) {
+pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
@@ -695,41 +634,18 @@ pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol,
   }
 
   uint8_t *c0 = NULL;
-  switch (lastmode) {
-  case APPROX_MODE_LAST_LIN:
-    c0 = malloc(nrow * sizeof *c0);
-    for (j = j * W; j < ncol; j++) {
-      fgetcoli(fin, j, nrow, c0, ncol);
-      pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    }
-    FREE(c0);
-    break;
-  case APPROX_MODE_LAST_WINDOW:
-    j *= W;
-    fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
-    pbwtad *ps = pbwtad_new(nrow);
-    pb[ncol - 1] = ps;
-    memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
-    rrsortx(nrow, pw, ps->a, aux);
-    PDUMP(ncol - 1, ps);
-    break;
-  }
-  fputc(0xA, stderr);
+  j *= W;
+  fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
+  ps = pbwtad_new(nrow);
+  pb[ncol - 1] = ps;
+  memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
+  rrsortx(nrow, pw, ps->a, aux);
+  PDUMP(ncol - 1, ps);
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    DPRINT("ars %3zu: ", j);
-    if (pb[j])
-      DPARR(nrow, pb[j]->a, "%zu ");
-    else
-      DPRINT(" ---\n");
-  }
-#endif
   FREE(c0);
   return pb;
 }
-pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol,
-                        APPROX_MODE lastmode) {
+pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
@@ -755,36 +671,18 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol,
   }
 
   uint8_t *c0 = NULL;
-  // TODO: complete this
-  switch (lastmode) {
-  case APPROX_MODE_LAST_LIN:
-    fprintf(stderr, "\e[0;33mWARNING: this is not implemented. Fallback on "
-                    "APPROX_MODE_LAST_WINDOW.\e[0m\n");
-  case APPROX_MODE_LAST_WINDOW:
-    j *= W;
-    sfgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
-    pbwtad *ps = pbwtad_new(nrow);
-    pb[ncol - 1] = ps;
-    memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
-    rrsortx(nrow, pw, ps->a, aux);
-    PDUMP(ncol - 1, ps);
-    break;
-  }
+  j *= W;
+  sfgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
+  ps = pbwtad_new(nrow);
+  pb[ncol - 1] = ps;
+  memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
+  rrsortx(nrow, pw, ps->a, aux);
+  PDUMP(ncol - 1, ps);
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    DPRINT("ars %3zu: ", j);
-    if (pb[j])
-      DPARR(nrow, pb[j]->a, "%zu ");
-    else
-      DPRINT(" ---\n");
-  }
-#endif
   FREE(c0);
   return pb;
 }
-pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol,
-                        APPROX_MODE lastmode) {
+pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
@@ -810,31 +708,13 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol,
   }
 
   uint8_t *c0 = NULL;
-  // TODO: complete this
-  switch (lastmode) {
-  case APPROX_MODE_LAST_LIN:
-    fprintf(stderr, "\e[0;33mWARNING: this is not implemented. Fallback on "
-                    "APPROX_MODE_LAST_WINDOW.\e[0m\n");
-  case APPROX_MODE_LAST_WINDOW:
-    j *= W;
-    sfgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
-    pbwtad *ps = pbwtad_new(nrow);
-    pb[ncol - 1] = ps;
-    memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
-    rrsortx(nrow, pw, ps->a, aux);
-    PDUMP(ncol - 1, ps);
-    break;
-  }
-
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    DPRINT("ars %3zu: ", j);
-    if (pb[j])
-      DPARR(nrow, pb[j]->a, "%zu ");
-    else
-      DPRINT(" ---\n");
-  }
-#endif
+  j *= W;
+  sfgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
+  ps = pbwtad_new(nrow);
+  pb[ncol - 1] = ps;
+  memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
+  rrsortx(nrow, pw, ps->a, aux);
+  PDUMP(ncol - 1, ps);
   FREE(c0);
   return pb;
 }
@@ -846,8 +726,7 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol,
 // ordering but it doesn't work. Now I have fever and I am not in the best
 // condition to understand what is happening.
 // However this might not be needed at all.
-pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
-                     APPROX_MODE lastmode) {
+pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
@@ -882,28 +761,15 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
   }
 
   uint8_t *c0 = NULL;
-  switch (lastmode) {
-  case APPROX_MODE_LAST_LIN:
-    c0 = malloc(nrow * sizeof *c0);
-    for (j = j * W; j < ncol; j++) {
-      fgetcoli(fin, j, nrow, c0, ncol);
-      pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    }
-    FREE(c0);
-    break;
-  case APPROX_MODE_LAST_WINDOW:
-    j *= W;
-    fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
-    ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
-    pb[ncol - 1] = ps;
-    qsp = quadsort_u64_ix(pw, nrow, NULL);
-    for (size_t i = 0; i < nrow; i++) {
-      ps->a[i] = qsp[i] - pw0;
-    }
-    break;
+  j *= W;
+  fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
+  ps = malloc(nrow * sizeof *ps);
+  ps->a = malloc(nrow * sizeof *(ps->a));
+  pb[ncol - 1] = ps;
+  qsp = quadsort_u64_ix(pw, nrow, NULL);
+  for (size_t i = 0; i < nrow; i++) {
+    ps->a[i] = qsp[i] - pw0;
   }
-
 #if 0
   for (size_t j = 0; j < ncol; j++) {
     DPRINT("lin %3zu: ", j);
@@ -922,11 +788,8 @@ pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol,
 pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
+
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-
-  // first W=(64 for now), must be computed linearly
-  // TODO: ask if true
-
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
@@ -963,7 +826,6 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   size_t j;
 
   for (j = 1; j * W <= ncol - W; j++) {
-    /*fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);*/
     pbwtad *ps = pbwtad_new(nrow);
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
@@ -998,15 +860,6 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
     PDUMP(j, pb[j]);
   }
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    DPRINT("prs %3zu: ", j);
-    if (pb[j])
-      DPARR(nrow, pb[j]->a, "%zu ");
-    else
-      DPRINT(" ---\n");
-  }
-#endif
   FREE(pw0);
   FREE(pw1);
   FREE(aux);
@@ -1017,9 +870,6 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-
-  // first W=(64 for now), must be computed linearly
-  // TODO: ask if true
 
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   pbwtad *p0 = pbwtad_new(nrow);
@@ -1046,11 +896,9 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
   size_t j;
 
   for (j = 1; j * W <= ncol - W; j++) {
-    /*fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);*/
     pbwtad *ps = pbwtad_new(nrow);
     pb[W * (j + 1) - 1] = ps;
     memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
-    /*fgetcoliw64r(fin, j, nrow, pw1, ncol);*/
     bfgetcolw64rn(fin, nrow, pw1, ncol);
     rrsortx(nrow, pw1, ps->a, aux);
 
@@ -1077,17 +925,7 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
     pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
     PDUMP(j, pb[j]);
   }
-  fputc(0xA, stderr);
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    DPRINT("prs %3zu: ", j);
-    if (pb[j])
-      DPARR(nrow, pb[j]->a, "%zu ");
-    else
-      DPRINT(" ---\n");
-  }
-#endif
   FREE(pw0);
   FREE(pw1);
   FREE(aux);
@@ -1101,7 +939,6 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
 
   // first W must be computed linearly
-
   FILE *fin = fopen(fpath, "r");
   if (!fin) {
     perror("[spr]");
@@ -1147,7 +984,6 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
       int lane = start + offset;
 
       for (size_t j = lane; j + W < ncol; j += W) {
-        /*printf("[par:%d] c:%zu (<%zu)\n", tid, j + W, j);*/
 
         uint64_t *pw = malloc(nrow * sizeof *pw);
         pbwtad *ps = pbwtad_new(nrow);
@@ -1161,22 +997,13 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
 #ifdef DBDUMP
 #pragma omp critical
         { PDUMP(j + W, ps); }
-
 #endif
+
         FREE(pw);
       }
     }
   }
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    DPRINT("prs %3zu: ", j);
-    if (pb[j])
-      DPARR(nrow, pb[j]->a, "%zu ");
-    else
-      DPRINT(" ---\n");
-  }
-#endif
   FREE(c0);
   return pb;
 }
@@ -1245,17 +1072,7 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
     fgetcoli(fin, j, nrow, c0, ncol);
     pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
   }
-  fputc(0xA, stderr);
 
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    DPRINT("prs %3zu: ", j);
-    if (pb[j])
-      DPARR(nrow, pb[j]->a, "%zu ");
-    else
-      DPRINT(" ---\n");
-  }
-#endif
   FREE(pw0);
   FREE(pw1);
   FREE(aux);
@@ -1409,17 +1226,17 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "blim") == 0) {
     r = mblinc(fd, nrow, ncol);
   } else if (strcmp(argv[1], "ars") == 0) {
-    r = wapproxc_rrs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
+    r = wapproxc_rrs(fin, nrow, ncol);
   } else if (strcmp(argv[1], "aqs") == 0) {
     fprintf(stderr, "\e[0;33mWARNING: this is not been properly tested and "
                     "might not work.\e[0m\n");
-    r = wapproxc_qs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
+    r = wapproxc_qs(fin, nrow, ncol);
   } else if (strcmp(argv[1], "bar") == 0) {
-    r = wbapproxc_rrs(fin, nrow, ncol, APPROX_MODE_LAST_WINDOW);
+    r = wbapproxc_rrs(fin, nrow, ncol);
   } else if (strcmp(argv[1], "bars") == 0) {
-    r = swbapproxc_rrs(fd, nrow, ncol, APPROX_MODE_LAST_WINDOW);
+    r = swbapproxc_rrs(fd, nrow, ncol);
   } else if (strcmp(argv[1], "barm") == 0) {
-    r = mwbapproxc_rrs(fd, nrow, ncol, APPROX_MODE_LAST_WINDOW);
+    r = mwbapproxc_rrs(fd, nrow, ncol);
   } else if (strcmp(argv[1], "prs") == 0) {
     r = wparc_rrs(fin, nrow, ncol);
   } else if (strcmp(argv[1], "bpr") == 0) {
@@ -1433,50 +1250,16 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-/*#define DTEST_VLIN*/
-#ifdef DTEST_VLIN
-  fprintf(stderr, "\e[0;33mWARNING: this will take a while.\e[0m\n");
-  pbwtad **ctrl = linc(fin, nrow, ncol);
-  if (r == NULL || ctrl == NULL) {
-    fprintf(stderr, "\e[0;31mERROR: something went wrong.\e[0m\n");
-    exit(5);
-  }
-  size_t ctrltot = 0;
-  for (size_t i = 0; i < ncol; i++) {
-    fprintf(stderr, "\rTesting: %10zu/%zu", i + 1, ncol);
-    if (r[i]) {
-      /*printf("  r   [%zu]: ", i);*/
-      /*parr(nrow, r[i]->a, "%zu ");*/
-      /*printf("  ctrl[%zu]: ", i);*/
-      /*parr(nrow, ctrl[i]->a, "%zu ");*/
-      /*printf("\n");*/
-      for (size_t j = 0; j < nrow; j++) {
-        assert(r[i]->a[j] == ctrl[i]->a[j]);
-      }
-      /*printf("  r   [%zu]: ", i);*/
-      /*parr(nrow, r[i]->d, "%zu ");*/
-      /*printf("  ctrl[%zu]: ", i);*/
-      /*parr(nrow, ctrl[i]->d, "%zu ");*/
-      /*printf("\n");*/
-      for (size_t j = 0; j < nrow; j++) {
-        assert(r[i]->d[j] == ctrl[i]->d[j]);
-      }
-      ctrltot++;
-    }
-  }
-  fprintf(stderr, "  (real %zu)\nDone.\n", ctrltot);
-#endif
-
   /*fclose(fin);*/
 
-  if (r != NULL) {
-    for (size_t i = 0; i < ncol; i++) {
-      if (r[i]) {
-        PBWTAD_FREE(r[i]);
-      }
-    }
-    FREE(r);
-  }
+  // if (r != NULL) {
+  //   for (size_t i = 0; i < ncol; i++) {
+  //     if (r[i]) {
+  //       PBWTAD_FREE(r[i]);
+  //     }
+  //   }
+  //   FREE(r);
+  // }
 
   return EXIT_SUCCESS;
 }
