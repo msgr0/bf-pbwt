@@ -643,8 +643,6 @@ pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
 
   pbwtad *p0 = pbwtad_new(nrow);
   pbwtad *p1 = pbwtad_new(nrow);
-  // pbwtad *ps = pbwtad_new(nrow);
-  // pb[W - 1] = ps;
   bfgetcolw64rn(fin, nrow, pw, ncol);
   rrsort0(nrow, pw, p1->a, aux);
   PDUMP(W - 1, p1);
@@ -652,8 +650,6 @@ pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    // pbwtad *ps = pbwtad_new(nrow);
-    // pb[W * (j + 1) - 1] = ps;
     memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
     bfgetcolw64rn(fin, nrow, pw, ncol);
     rrsortx(nrow, pw, p1->a, aux);
@@ -675,42 +671,44 @@ pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   FREE(aux);
   return NULL;
 }
-pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
-  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
 
+pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
   size_t *aux = malloc(nrow * sizeof *aux);
 
-  pbwtad *ps = pbwtad_new(nrow);
-  pb[W - 1] = ps;
+  pbwtad *p0 = pbwtad_new(nrow);
+  pbwtad *p1 = pbwtad_new(nrow);
+  // pb[W - 1] = ps;
   sbfgetcolw64rn(fin, nrow, pw, ncol);
-  rrsort0(nrow, pw, ps->a, aux);
-  PDUMP(W - 1, ps);
+  rrsort0(nrow, pw, p1->a, aux);
+  PDUMP(W - 1, p1);
+  SWAP(p0, p1);
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    pbwtad *ps = pbwtad_new(nrow);
-    pb[W * (j + 1) - 1] = ps;
-    memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
+    // pbwtad *ps = pbwtad_new(nrow);
+    // pb[W * (j + 1) - 1] = ps;
+    memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
     sbfgetcolw64rn(fin, nrow, pw, ncol);
-    rrsortx(nrow, pw, ps->a, aux);
-    PDUMP(W * (j + 1) - 1, ps);
+    rrsortx(nrow, pw, p1->a, aux);
+    PDUMP(W * (j + 1) - 1, p1);
+    SWAP(p0, p1);
   }
 
   uint8_t *c0 = NULL;
   j *= W;
   sfgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
-  ps = pbwtad_new(nrow);
-  pb[ncol - 1] = ps;
-  memcpy(ps->a, pb[j - 1]->a, nrow * sizeof *(ps->a));
-  rrsortx(nrow, pw, ps->a, aux);
-  PDUMP(ncol - 1, ps);
+  memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
+  rrsortx(nrow, pw, p1->a, aux);
+  PDUMP(ncol - 1, p1);
 
+  PBWTAD_FREE(p0);
+  PBWTAD_FREE(p1);
   FREE(c0);
-  return pb;
+  FREE(pw);
+  FREE(aux);
+  return NULL;
 }
 pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
