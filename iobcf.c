@@ -23,8 +23,10 @@
 #endif
 
 void fgetrc(void *fd, size_t *nr, size_t *nc) {
-  bcf_srs_t *sr = fd;
+  bcf_srs_t *sr = bcf_sr_init();
+  bcf_sr_add_reader(sr, ((bcf_srs_t *)fd)->readers[0].fname);
   bcf_hdr_t *hdr = sr->readers[0].header;
+
   *nr = bcf_hdr_nsamples(hdr) * 2;
   *nc = 0;
 
@@ -33,14 +35,17 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
   while (bcf_sr_next_line(sr)) {
     (*nc)++;
   }
-  // WARN: this does not work
-  // bcf_sr_seek(sr, NULL, 0);
+
+  bcf_sr_destroy(sr);
 }
 
 void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
-  // NOTE: nc is used as a flag. If nc == 0, ignore _li and assume sequential read
+  // NOTE: nc is used as a flag. If nc == 0, ignore _li and assume sequential
+  // read
   bcf_srs_t *sr = fd;
-  bcf_hdr_t *hdr = sr->readers[0].header;
+  static bcf_hdr_t *hdr = NULL;
+  if (!hdr)
+    hdr = sr->readers[0].header;
 
   static ssize_t _li = -1;
   // NOTE: I am doing a bit of trickery here assuming that
@@ -67,6 +72,8 @@ void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
       IOBCF_WELLFORMED_CHECK(ptr[1]);
       c[2 * i + 1] = bcf_gt_allele(ptr[1]);
     }
+    free(gt_arr);
+    // bcf_destroy(line);
   } else {
     // WARN: this does not work, at the moment.
     // If we do not fix this, it will be a bloodbath
@@ -146,7 +153,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       memset(c, 0, n * sizeof *c);                                             \
       for (size_t wix = 0; wix < W; wix++) {                                   \
         if (!bcf_sr_next_line(sr))                                             \
-          return;                                                           \
+          return;                                                              \
         bcf1_t *line = bcf_sr_get_line(sr, 0);                                 \
         int32_t *gt_arr = NULL, ngt_arr = 0;                                   \
         int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);             \

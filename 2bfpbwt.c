@@ -1095,73 +1095,17 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 #elif defined(BF2IOMODE_BCF)
-  int fd = -1;
-  void *fin = NULL;
-
-#if 0
-  htsFile *fp = hts_open(argv[2], "rb");
-  bcf_hdr_t *hdr = bcf_hdr_read(fp);
-  bcf1_t *rec = bcf_init();
-  size_t n = 0;
-  while (bcf_read(fp, hdr, rec) >= 0) {
-    bcf_unpack(rec, BCF_UN_ALL); // NOTE: ?
-    int32_t *gt_arr = NULL, ngt_arr = 0;
-    int i, j, ngt, nsmpl = bcf_hdr_nsamples(hdr);
-    ngt = bcf_get_genotypes(hdr, rec, &gt_arr, &ngt_arr);
-    int max_ploidy = ngt / nsmpl;
-    // printf("\nmax_ploidy = %d\n", max_ploidy);
-    // parr(ngt, gt_arr, "%d ");
-    uint8_t *col = malloc(nsmpl * 2 * sizeof *col);
-    size_t icol = 0;
-    for (i = 0; i < nsmpl; i++) {
-      int32_t *ptr = gt_arr + i * max_ploidy;
-      // printf("  %d", *ptr);
-      for (j = 0; j < max_ploidy; j++) {
-        // if true, the sample has smaller ploidy
-        // If a sample has less genotypes than max_ploidy,
-        // the "vector" retains the size of max_ploidy, but
-        // missing ploid are filled with `bcf_int32_vector_end` macro
-        if (ptr[j] == bcf_int32_vector_end)
-          break;
-
-        // missing allele
-        if (bcf_gt_is_missing(ptr[j]))
-          exit(-1);
-
-        // the VCF 0-based allele index
-        col[icol] = bcf_gt_allele(ptr[j]);
-        icol++;
-      }
-    }
-    printf("%zu: %d\n", n, col[1]);
-    n++;
-    // putchar(0xA);
-    // parr(nsmpl * 2, col, "%d ");
-  }
-#else
   bcf_srs_t *sr = bcf_sr_init();
   bcf_sr_add_reader(sr, argv[2]);
 
-#endif
-
-  fin = sr;
-
+  int fd = -1;
+  void *fin = sr;
 #else
 #error BF2IOMODE is not specified
 #endif
 
   size_t nrow, ncol;
-#ifdef BF2IOMODE_BCF
-  bcf_srs_t *_sr = bcf_sr_init();
-  bcf_sr_add_reader(_sr, argv[2]);
-  fgetrc(_sr, &nrow, &ncol);
-  // WARN: seeking does not work for unknown reasons.
-  // Therefore here I need to duplicate the input.
-  // bcf_sr_seek(sr, NULL, 0);
-  bcf_sr_destroy(_sr);
-#else
   fgetrc(fin, &nrow, &ncol);
-#endif
   DPRINT("[%s] row: %5zu, col: %5zu\n", __func__, nrow, ncol);
   // uint8_t *cc = malloc(nrow * sizeof *cc);
   // fgetcoli(fin, 0, nrow, cc, 0);
@@ -1260,6 +1204,13 @@ int main(int argc, char *argv[]) {
   //   }
   //   FREE(r);
   // }
+
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
+  // TODO: file cleanup
+#elif defined(BF2IOMODE_BCF)
+  bcf_sr_destroy(sr);
+#else
+#endif
 
   return EXIT_SUCCESS;
 }
