@@ -364,6 +364,46 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   return ret;
 }
 
+static int cpbwti(size_t n, uint8_t *restrict c, pbwtad *restrict pp, pbwtad *restrict pc) {
+  static size_t *o = NULL;
+  static size_t *h = NULL;
+  static size_t k = 1;
+
+  if (!o)
+    o = malloc(n * sizeof *o);
+  if (!h)
+    h = malloc(n * sizeof *h);
+
+  size_t r = 0, q = 0;
+  size_t f = k, g = k;
+
+  size_t i;
+  for (i = 0; i < n; i++) {
+    size_t idx = pp->a[i];
+    size_t ddx = pp->d[i];
+
+    f = (ddx > f) ? ddx : f;
+    g = (ddx > g) ? ddx : g;
+
+    size_t mask = c[idx];
+    o[q] = idx;
+    pc->a[r] = idx;
+    h[q] = g;
+    pc->d[r] = f;
+
+    f &= -mask;       // f = 0 if mask == 0, unchanged if mask == 1
+    g &= -(1 - mask); // g = 0 if mask == 1, unchanged if mask == 0
+    q += mask;     // Increment q if mask is 1
+    r += mask ^ 1; // Increment r if mask is 0
+  }
+
+  memcpy(pc->a + r, o, q * sizeof(size_t));
+  memcpy(pc->d + r, h, q * sizeof(size_t));
+
+  k++;
+  return 1;
+}
+
 static pbwtad *cpbwtk(size_t n, uint8_t *restrict c, pbwtad *restrict p,
                       size_t k) {
   static size_t *o = NULL;
@@ -445,37 +485,37 @@ static pbwtad *cpbwtk(size_t n, uint8_t *restrict c, pbwtad *restrict p,
 
 pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  size_t *o = malloc(nrow * sizeof *o);
-  size_t *z = malloc(nrow * sizeof *z);
 
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
-  pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
-  if (!pl)
-    return NULL;
+  // pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
+  // if (!pl)
+  //   return NULL;
 
   pbwtad *p0 = pbwtad_new(nrow);
+  pbwtad *p1 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
     p0->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
   // pl[0] = cpbwtk(nrow, c0, p0, 1);
-  pl[0] = cpbwt(nrow, c0, p0);
-  PDUMP(0, p0);
-  PBWTAD_FREE(p0);
+  cpbwti(nrow, c0, p0, p1);
+  PDUMP(0, p1);
+  SWAP(p0, p1);
 
   for (size_t j = 1; j < ncol; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
     // pl[j] = cpbwtk(nrow, c0, pl[j - 1], j + 1);
-    pl[j] = cpbwt(nrow, c0, pl[j - 1]);
-    PDUMP(j, pl[j]);
+    cpbwti(nrow, c0, p0, p1);
+    PDUMP(j, p1);
+    SWAP(p0, p1);
   }
 
+  PBWTAD_FREE(p0);
+  PBWTAD_FREE(p1);
   FREE(c0);
-  FREE(o);
-  FREE(z);
-  return pl;
+  return NULL;
 }
 pbwtad **blinc(void *fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
