@@ -40,11 +40,12 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
 }
 
 void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
-  // NOTE: nc is used as a flag. If nc == 0, ignore _li and assume sequential
-  // read
+  // NOTE: nc is used as a flag.
+  // If nc == 0, ignore _li and assume sequential read
+  // also since it might invalidate hdr, reset that as well from fd
   bcf_srs_t *sr = fd;
   static bcf_hdr_t *hdr = NULL;
-  if (!hdr)
+  if (!hdr || !nc)
     hdr = sr->readers[0].header;
 
   static ssize_t _li = -1;
