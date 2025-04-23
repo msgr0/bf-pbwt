@@ -486,12 +486,6 @@ static pbwtad *cpbwtk(size_t n, uint8_t *restrict c, pbwtad *restrict p,
 pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
 
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
-  // pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
-  // if (!pl)
-  //   return NULL;
-
   pbwtad *p0 = pbwtad_new(nrow);
   pbwtad *p1 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
@@ -506,7 +500,6 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
 
   for (size_t j = 1; j < ncol; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    // pl[j] = cpbwtk(nrow, c0, pl[j - 1], j + 1);
     cpbwti(nrow, c0, p0, p1);
     PDUMP(j, p1);
     SWAP(p0, p1);
@@ -519,30 +512,29 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
 }
 pbwtad **blinc(void *fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
-  pbwtad **pl = malloc(ncol * sizeof(pbwtad *));
-  if (!pl)
-    return NULL;
 
   pbwtad *p0 = pbwtad_new(nrow);
+  pbwtad *p1 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
     p0->a[j] = j;
     p0->d[j] = 0;
   }
   bfgetcoln(fin, nrow, c0, ncol);
-  pl[0] = cpbwt(nrow, c0, p0);
-  PDUMP(0, p0);
-  PBWTAD_FREE(p0);
+  cpbwti(nrow, c0, p0, p1);
+  PDUMP(0, p1);
+  SWAP(p0, p1);
 
   for (size_t j = 1; j < ncol; j++) {
     bfgetcoln(fin, nrow, c0, ncol);
-    pl[j] = cpbwt(nrow, c0, pl[j - 1]);
-    PDUMP(j, pl[j]);
+    cpbwti(nrow, c0, p0, p1);
+    PDUMP(j, p1);
+    SWAP(p0, p1);
   }
 
+  PBWTAD_FREE(p0);
+  PBWTAD_FREE(p1);
   FREE(c0);
-  return pl;
+  return NULL;
 }
 pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
