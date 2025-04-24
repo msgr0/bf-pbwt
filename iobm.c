@@ -1,5 +1,6 @@
 // vim:ft=c
 #include "io.h"
+#include <string.h>
 
 #define RCBUFSIZE 8192
 
@@ -14,10 +15,30 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
     (*nc)++;
 
   (*nr)++;
+#if 1
   while ((bytes = fread(buf, 1, RCBUFSIZE, fd)) > 0) {
     for (size_t i = 0; i < bytes; ++i)
       (*nr) += buf[i] == 0xA;
   }
+#else
+  while (1) {
+    char buf[RCBUFSIZE + 1];
+    size_t bytes_read = fread(buf, 1, RCBUFSIZE, fd);
+    if (bytes_read <= 0)
+      return;
+
+    bytes += bytes_read;
+    char *end = buf + bytes_read;
+    size_t buflines = 0;
+
+    *end = '\n';
+    for (char *p = buf; (p = memchr(p, '\n', RCBUFSIZE+1)) < end; p++) {
+      buflines++;
+    }
+
+    *nr += buflines;
+  }
+#endif
 }
 
 int fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
