@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "tracing.h"
 
 #ifdef BF2IOMODE_BCF
 #include "htslib/synced_bcf_reader.h"
@@ -1165,7 +1166,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   size_t nrow, ncol;
-  fgetrc(fin, &nrow, &ncol);
+  TRACE(fgetrc(fin, &nrow, &ncol));
   DPRINT("[%s] row: %5zu, col: %5zu\n", __func__, nrow, ncol);
   // uint8_t *cc = malloc(nrow * sizeof *cc);
   // fgetcoli(fin, 0, nrow, cc, 0);
@@ -1222,7 +1223,8 @@ int main(int argc, char *argv[]) {
     }
   }
   if (strcmp(argv[1], "lin") == 0) {
-    r = linc(fin, nrow, ncol);
+    // r = linc(fin, nrow, ncol);
+    TRACE(linc(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "bli") == 0) {
     r = blinc(fin, nrow, ncol);
   } else if (strcmp(argv[1], "blis") == 0) {
