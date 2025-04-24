@@ -1173,7 +1173,8 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "blis") == 0) {
     r = sblinc(fd, nrow, ncol);
   } else if (strcmp(argv[1], "blim") == 0) {
-    r = mblinc(fd, nrow, ncol);
+    // r = mblinc(fd, nrow, ncol);
+    TRACE(mblinc(fd, nrow, ncol), r);
   } else if (strcmp(argv[1], "ars") == 0) {
     r = wapproxc_rrs(fin, nrow, ncol);
   } else if (strcmp(argv[1], "bar") == 0) {
