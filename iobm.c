@@ -1,20 +1,22 @@
 // vim:ft=c
 #include "io.h"
 
+#define RCBUFSIZE 8192
+
 void fgetrc(void *fd, size_t *nr, size_t *nc) {
+  unsigned char buf[RCBUFSIZE];
+  size_t bytes;
   fseek(fd, 0, SEEK_SET);
 
   *nc = *nr = 0;
-  int c, prev;
+  int c;
   while ((c = fgetc(fd)) != 0xA)
     (*nc)++;
 
   (*nr)++;
-  prev = c;
-
-  while ((c = fgetc(fd)) != EOF) {
-    *nr += (c == 0xA) & (prev != 0xA);
-    prev = c;
+  while ((bytes = fread(buf, 1, RCBUFSIZE, fd)) > 0) {
+    for (size_t i = 0; i < bytes; ++i)
+      (*nr) += buf[i] == 0xA;
   }
 }
 
