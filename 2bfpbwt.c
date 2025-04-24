@@ -905,7 +905,7 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
 #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
-    fgetcoli(fin, j, nrow, c0, 3);
+    fgetcoli(fin, j, nrow, c0, 0);
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
