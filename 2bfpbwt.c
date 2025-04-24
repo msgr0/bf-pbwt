@@ -1,5 +1,4 @@
 #include "io.h"
-#include "lib/quadsort/quadsort.h"
 #include <assert.h>
 #include <fcntl.h>
 #include <omp.h>
@@ -771,72 +770,6 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   return NULL;
 }
 
-// WARN: I believe that this might be wrong.
-// I am not sure it works, as to use the order based on the previous column
-// I tried with pw and pw0, and now it works.
-// The next idea was to use aux to save the value read in order of the previous
-// ordering but it doesn't work. Now I have fever and I am not in the best
-// condition to understand what is happening.
-// However this might not be needed at all.
-pbwtad **wapproxc_qs(FILE *fin, size_t nrow, size_t ncol) {
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
-  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-
-  // Compute the bit-packed windows
-  uint64_t *pw = malloc(nrow * sizeof *pw);
-  uint64_t *pw0;
-  /*uint64_t *aux = malloc(nrow * sizeof *aux);*/
-
-  pbwtad *ps = malloc(nrow * sizeof *ps);
-  ps->a = malloc(nrow * sizeof *(ps->a));
-  pb[W - 1] = ps;
-  fgetcoliw64r(fin, 0, nrow, pw, ncol);
-  uint64_t **qsp = quadsort_u64_ix(pw, nrow, NULL);
-  pw0 = pw;
-
-  size_t j;
-  for (j = 1; j * W <= ncol - W; j++) {
-    fgetcoliw64r(fin, j, nrow, pw, ncol);
-    for (size_t i = 0; i < nrow; i++) {
-      ps->a[i] = qsp[i] - pw0;
-      /*aux[i] = pw[ps->a[i]];*/
-    }
-    ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
-    pb[W * (j + 1) - 1] = ps;
-    qsp = quadsort_u64_ix(pw, nrow, NULL);
-    pw0 = pw;
-  }
-  for (size_t i = 0; i < nrow; i++) {
-    ps->a[i] = qsp[i] - pw0;
-  }
-
-  uint8_t *c0 = NULL;
-  j *= W;
-  fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
-  ps = malloc(nrow * sizeof *ps);
-  ps->a = malloc(nrow * sizeof *(ps->a));
-  pb[ncol - 1] = ps;
-  qsp = quadsort_u64_ix(pw, nrow, NULL);
-  for (size_t i = 0; i < nrow; i++) {
-    ps->a[i] = qsp[i] - pw0;
-  }
-#if 0
-  for (size_t j = 0; j < ncol; j++) {
-    DPRINT("lin %3zu: ", j);
-    if (pb[j])
-      DPARR(nrow, pb[j]->a, "%zu ");
-    else
-      DPRINT(" ---\n");
-  }
-#endif
-  FREE(c0);
-  /*FREE(pw);*/
-  FREE(pw0);
-  return pb;
-}
-
 pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   // NOTE: here it is necessary to keep in memory the entire windows
   pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
@@ -1152,7 +1085,7 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
 }
 
 int main(int argc, char *argv[]) {
-  char _usage_args_[] = "[lin|bli[s|m]|ars|aqs|bar[s|m]|prs|bpr|spr] FILE\n";
+  char _usage_args_[] = "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr|spr] FILE\n";
   if (argc < 2) {
     fprintf(stderr, "Usage: %s %s FILE\n", argv[0], _usage_args_);
     return EXIT_FAILURE;
@@ -1243,10 +1176,6 @@ int main(int argc, char *argv[]) {
     r = mblinc(fd, nrow, ncol);
   } else if (strcmp(argv[1], "ars") == 0) {
     r = wapproxc_rrs(fin, nrow, ncol);
-  } else if (strcmp(argv[1], "aqs") == 0) {
-    fprintf(stderr, "\e[0;33mWARNING: this is not been properly tested and "
-                    "might not work.\e[0m\n");
-    r = wapproxc_qs(fin, nrow, ncol);
   } else if (strcmp(argv[1], "bar") == 0) {
     r = wbapproxc_rrs(fin, nrow, ncol);
   } else if (strcmp(argv[1], "bars") == 0) {
