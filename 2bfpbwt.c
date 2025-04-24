@@ -93,6 +93,12 @@ uint8_t DO_DUMP = 0;
     puts("");                                                                  \
   } while (0)
 
+typedef struct pbwtad pbwtad;
+struct pbwtad {
+  size_t *a;
+  size_t *d;
+};
+
 /*
  * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
  * using externally allocated `aux[n]` auxiliary array.
@@ -226,12 +232,40 @@ void rrsort0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
     post = tmp;
   }
 }
+void reversec(pbwtad *p, pbwtad *rev, size_t n) {
+  for (size_t i = 0; i < n; i++) {
+    rev->a[p->a[i]] = i;
+    rev->d[p->a[i]] = p->d[i];
+  }
+}
 
-typedef struct pbwtad pbwtad;
-struct pbwtad {
-  size_t *a;
-  size_t *d;
-};
+void divc(size_t n, uint64_t *c, pbwtad *p, pbwtad *p_rev, uint64_t *x) {
+  // c contains 64bit-encoded ints
+  // xor of each c[s[i]] and its preceeding;
+  // x[0] contains no information, previous x information is discarded;
+  // here 64 is the size of the window
+  static size_t k = 1;
+
+  p->d[0] = 0;
+  size_t div;
+  // size_t *dprec = malloc(n * sizeof(dprec));
+  // memcpy(dprec, p->d, n * sizeof(dprec));
+
+  // aprec 4 3 6 5 4 5 ...
+  // dprec x x x x x x ...
+  //
+  // a   4 5 2 1 6 3
+  // d   y O y y y y
+  // O = LCS(5, 4) + dprec(5)
+
+  for (size_t i = 1; i < n; i++) {
+    x[i] = (uint64_t)c[p->a[i]] ^ (uint64_t)c[p->a[i - 1]];
+    div = x[i] ? __builtin_clzll(x[i]) : 64;
+    p->d[i] = (div == 64) ? (p_rev->d[p->a[i]] + div) : div;
+  }
+
+  k++;
+}
 
 static inline pbwtad *pbwtad_new(size_t n) {
   pbwtad *p = malloc(sizeof *p);
@@ -622,21 +656,29 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
   size_t *aux = malloc(nrow * sizeof *aux);
+  uint64_t *xor = malloc(nrow * sizeof *xor);
 
   pbwtad *p0 = pbwtad_new(nrow);
-  pbwtad *p1 = pbwtad_new(nrow);
+  pbwtad *prev = pbwtad_new(nrow);
+
   fgetcoliw64r(fin, 0, nrow, pw, ncol);
-  rrsort0(nrow, pw, p1->a, aux);
-  PDUMP(W - 1, p1);
-  SWAP(p0, p1);
+  rrsort0(nrow, pw, p0->a, aux);
+  reversec(p0, prev, nrow);
+  divc(nrow, pw, p0, prev, xor);
+  reversec(p0, prev, nrow);
+  PDUMP(W - 1, p0);
+  // SWAP(p0, p1);
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
+    // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
     fgetcoliw64r(fin, j, nrow, pw, ncol);
-    rrsortx(nrow, pw, p1->a, aux);
-    PDUMP(W * (j + 1) - 1, p1);
-    SWAP(p0, p1);
+    rrsortx(nrow, pw, p0->a, aux);
+    reversec(p0, prev, nrow);
+    divc(nrow, pw, p0, prev, xor);
+    reversec(p0, prev, nrow);
+    PDUMP(W * (j + 1) - 1, p0);
+    // SWAP(p0, p1);
   }
 
   uint8_t *c0 = NULL;
@@ -650,14 +692,12 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
-
   // last column needs special handling, since it is < W
-  memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
-  rrsortx(nrow, pw, p1->a, aux);
-  PDUMP(ncol - 1, p1);
+  // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
+  rrsortx(nrow, pw, p0->a, aux);
+  PDUMP(ncol - 1, p0);
 
   PBWTAD_FREE(p0);
-  PBWTAD_FREE(p1);
   FREE(c0);
   FREE(pw);
   FREE(aux);

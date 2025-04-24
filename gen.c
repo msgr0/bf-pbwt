@@ -7,8 +7,8 @@
 #define BITS 8
 
 int main(int argc, char *argv[]) {
-  if (argc < 4) {
-    fprintf(stderr, "usage: %s enc|txt ROWS COLS [err]\n", argv[0]);
+  if (argc < 5) {
+    fprintf(stderr, "usage: %s enc|txt ROWS COLS ERR [file] \n", argv[0]);
     return EXIT_FAILURE;
   }
   size_t rows = atoi(argv[2]);
@@ -17,7 +17,14 @@ int main(int argc, char *argv[]) {
   float err = 0.0;
   srand(42);
 
-  if (argc > 4 && strcmp(argv[1], "enc") == 0) {
+  if (argc >= 5 && strcmp(argv[1], "enc") == 0) {
+    FILE of;
+    if (argc == 6) {
+      of = *fopen(argv[5], "wb");
+    }
+    else {
+      of = *stdout;
+    }
 
     // printf("doing ENC\n");
     err = atof(argv[4]);
@@ -25,6 +32,13 @@ int main(int argc, char *argv[]) {
     size_t padding = cols % 8;
     size_t nw = (cols / 8) + (padding > 0);
     size_t fcols = cols + 8 - padding;
+
+    // we'll write rows, cols as an header
+    // if cols % 8 != 0, then we know we have to add 
+    // a padding to reach the next_int % 8 == 0
+
+    fwrite(&rows, sizeof(uint32_t), 1, &of);
+    fwrite(&cols, sizeof(uint32_t), 1, &of);
 
     char *frow = (char *)malloc(fcols * sizeof(char));
 
@@ -45,20 +59,17 @@ int main(int argc, char *argv[]) {
           ftcol_pack[i] = (ftcol_pack[i] << 1) | ( rand() > (int)(err * INT32_MAX) ? (frow[(j)*8 + b-1] & 1U) : (rand() & 1U) );
         }
       }
-      
-      fwrite(ftcol_pack, sizeof(char), rows, stdout);
-      
-      puts("");
+      fwrite(ftcol_pack, sizeof(char), rows, &of);
     }
 
     free(frow);
     free(ftcol_pack);
+    fclose(&of);
 
     return EXIT_SUCCESS;
   }
 
   if (argc > 4 && strcmp(argv[1], "txt") == 0) {
-    printf("doing TXT\n");
     err = atof(argv[4]);
     char *frow = (char *)malloc(cols * sizeof(char));
     for (size_t i = 0; i < cols; i++) {
