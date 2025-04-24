@@ -517,11 +517,21 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
   PDUMP(0, p1);
   SWAP(p0, p1);
 
-  for (size_t j = 1; j < ncol; j++) {
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
+  for (size_t j = 1; j < ncol;) {
     fgetcoli(fin, j, nrow, c0, ncol);
+#elif defined(BF2IOMODE_BCF)
+    size_t j = 1;
+    while (fgetcoli(fin, j, nrow, c0, 1)) {
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
+  // for (size_t j = 1; j < ncol; j++) {
+    // fgetcoli(fin, j, nrow, c0, ncol);
     cpbwti(nrow, c0, p0, p1);
     PDUMP(j, p1);
     SWAP(p0, p1);
+    j++;
   }
 
   PBWTAD_FREE(p0);

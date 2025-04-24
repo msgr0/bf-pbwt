@@ -18,7 +18,7 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
   }
 }
 
-void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
+int fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
   int x;
@@ -29,6 +29,7 @@ void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
     /*printf("%d\n", x);*/
     c[r] = x;
   }
+  return 1;
 }
 
 // get column i from file

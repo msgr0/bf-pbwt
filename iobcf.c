@@ -23,23 +23,25 @@
 #endif
 
 void fgetrc(void *fd, size_t *nr, size_t *nc) {
-  bcf_srs_t *sr = bcf_sr_init();
-  bcf_sr_add_reader(sr, ((bcf_srs_t *)fd)->readers[0].fname);
-  bcf_hdr_t *hdr = sr->readers[0].header;
+  // bcf_srs_t *sr = bcf_sr_init();
+  // bcf_sr_add_reader(sr, ((bcf_srs_t *)fd)->readers[0].fname);
+  // bcf_hdr_t *hdr = sr->readers[0].header;
+
+  bcf_hdr_t *hdr = ((bcf_srs_t *)fd)->readers[0].header;
 
   *nr = bcf_hdr_nsamples(hdr) * 2;
-  *nc = 0;
+  *nc = -1;
 
-  // NOTE: maybe some parts might be rewritten to avoid doing this,
-  // however there is not much overhead. For chr10 it takes ~5 secs
-  while (bcf_sr_next_line(sr)) {
-    (*nc)++;
-  }
-
-  bcf_sr_destroy(sr);
+  // // NOTE: maybe some parts might be rewritten to avoid doing this,
+  // // however there is not much overhead. For chr10 it takes ~5 secs
+  // while (bcf_sr_next_line(sr)) {
+  //   (*nc)++;
+  // }
+  //
+  // bcf_sr_destroy(sr);
 }
 
-void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
+int fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
   // NOTE: nc is used as a flag.
   // If nc == 0, ignore _li and assume sequential read
   // also since it might invalidate hdr, reset that as well from fd
@@ -58,7 +60,7 @@ void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
   if (i == _li + 1 || !nc) {
     // this check should not be necessary
     if (!bcf_sr_next_line(sr))
-      exit(124);
+      return 0;
     bcf1_t *line = bcf_sr_get_line(sr, 0);
     int32_t *gt_arr = NULL, ngt_arr = 0;
     int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
@@ -84,6 +86,7 @@ void fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
     exit(24);
   }
   _li = i;
+  return 1;
 }
 
 void bfgetcoln(void *fd, size_t n, uint8_t *restrict c, size_t nc) {

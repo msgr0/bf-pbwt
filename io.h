@@ -33,7 +33,7 @@ void fgetrc(void *fd, size_t *nr, size_t *nc);
 // get column i from file
 // c[n] is a pointer to store the column,
 // nc is total number of columns
-void fgetcoli(void *fd, size_t i, size_t n, uint8_t *c, size_t nc);
+int fgetcoli(void *fd, size_t i, size_t n, uint8_t *c, size_t nc);
 
 // Buffered File GET COLumn Next
 // get next column, using buffered freads
