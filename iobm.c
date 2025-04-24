@@ -15,7 +15,7 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
     (*nc)++;
 
   (*nr)++;
-#if 1
+#if 0
   while ((bytes = fread(buf, 1, RCBUFSIZE, fd)) > 0) {
     for (size_t i = 0; i < bytes; ++i)
       (*nr) += buf[i] == 0xA;
