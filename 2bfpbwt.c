@@ -138,6 +138,41 @@ void rrsortx(size_t n, uint64_t *c, size_t *s, size_t *aux) {
     post = tmp;
   }
 }
+void rrsortx2(size_t n, uint64_t *c, size_t *s, size_t *aux, size_t *prev) {
+  size_t *tmp;
+  size_t j;
+  size_t *pre = s;
+  size_t *post = aux;
+  uint8_t b;
+
+  for (size_t i = 0; i < 8; i++) {
+    size_t cnt[256] = {0};
+
+    // frequencies
+    for (j = 0; j < n; j++) {
+      /*cnt[mask2(c[j], i)]++;*/
+      b = (c[j] >> (8 * i)) & 0xFFULL;
+      cnt[b]++;
+    }
+    // prefix sum
+    for (size_t j = 1; j < 256; j++)
+      cnt[j] += cnt[j - 1];
+    // sorting
+    for (ssize_t j = n - 1; j >= 0; --j) {
+      /*cnt[mask2(c[pre[j]], i)]--;*/
+      /*post[cnt[mask2(c[pre[j]], i)]] = pre[j];*/
+
+      b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
+      cnt[b]--;
+      post[cnt[b]] = pre[j];
+      prev[post[j]] = j;
+    }
+    // swap s and aux
+    tmp = pre;
+    pre = post;
+    post = tmp;
+  }
+}
 
 /*
  * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
@@ -234,8 +269,8 @@ void rrsort0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
 }
 void reversec(pbwtad *p, pbwtad *rev, size_t n) {
   for (size_t i = 0; i < n; i++) {
-    rev->a[p->a[i]] = i;
-    rev->d[p->a[i]] = p->d[i];
+    // rev->a[p->a[i]] = i;
+    // rev->d[p->a[i]] = p->d[i];
   }
 }
 
@@ -248,20 +283,14 @@ void divc(size_t n, uint64_t *c, pbwtad *p, pbwtad *p_rev, uint64_t *x) {
 
   p->d[0] = 0;
   size_t div;
-  // size_t *dprec = malloc(n * sizeof(dprec));
-  // memcpy(dprec, p->d, n * sizeof(dprec));
-
-  // aprec 4 3 6 5 4 5 ...
-  // dprec x x x x x x ...
-  //
-  // a   4 5 2 1 6 3
-  // d   y O y y y y
-  // O = LCS(5, 4) + dprec(5)
 
   for (size_t i = 1; i < n; i++) {
-    x[i] = (uint64_t)c[p->a[i]] ^ (uint64_t)c[p->a[i - 1]];
-    div = x[i] ? __builtin_clzll(x[i]) : 64;
+    // x[i] = c[p->a[i]] ^ c[p->a[i - 1]];
+    // div = x[i] ? __builtin_clzll(x[i]) : 64;
+    uint64_t x = c[p->a[i]] ^ c[p->a[i - 1]];
+    div = x ? __builtin_clzll(x) : 64;
     p->d[i] = (div == 64) ? (p_rev->d[p->a[i]] + div) : div;
+    p_rev->d[p->a[i]] = p->d[i];
   }
 
   k++;
@@ -554,12 +583,12 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
   for (size_t j = 1; j < ncol;) {
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
-    size_t j = 1;
-    while (fgetcoli(fin, j, nrow, c0, 1)) {
+  size_t j = 1;
+  while (fgetcoli(fin, j, nrow, c0, 1)) {
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
-  // for (size_t j = 1; j < ncol; j++) {
+    // for (size_t j = 1; j < ncol; j++) {
     // fgetcoli(fin, j, nrow, c0, ncol);
     cpbwti(nrow, c0, p0, p1);
     PDUMP(j, p1);
@@ -656,16 +685,16 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
   size_t *aux = malloc(nrow * sizeof *aux);
-  uint64_t *xor = malloc(nrow * sizeof *xor);
 
   pbwtad *p0 = pbwtad_new(nrow);
   pbwtad *prev = pbwtad_new(nrow);
 
   fgetcoliw64r(fin, 0, nrow, pw, ncol);
   rrsort0(nrow, pw, p0->a, aux);
-  reversec(p0, prev, nrow);
-  divc(nrow, pw, p0, prev, xor);
-  reversec(p0, prev, nrow);
+  for (size_t i = 0; i < nrow; i++) {
+    prev->a[p0->a[i]] = i;
+  }
+  divc(nrow, pw, p0, prev, NULL);
   PDUMP(W - 1, p0);
   // SWAP(p0, p1);
 
@@ -673,10 +702,8 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   for (j = 1; j * W <= ncol - W; j++) {
     // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
     fgetcoliw64r(fin, j, nrow, pw, ncol);
-    rrsortx(nrow, pw, p0->a, aux);
-    reversec(p0, prev, nrow);
-    divc(nrow, pw, p0, prev, xor);
-    reversec(p0, prev, nrow);
+    rrsortx2(nrow, pw, p0->a, aux, prev->a);
+    divc(nrow, pw, p0, prev, NULL);
     PDUMP(W * (j + 1) - 1, p0);
     // SWAP(p0, p1);
   }
