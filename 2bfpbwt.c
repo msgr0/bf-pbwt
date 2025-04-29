@@ -17,6 +17,21 @@
 #define DBDUMP
 uint8_t DO_DUMP = 0;
 #ifdef DBDUMP
+#define PDUMPR(i, p)                                                           \
+  do {                                                                         \
+    if (DO_DUMP) {                                                             \
+      printf("%zu:", (size_t)(i));                                             \
+      size_t pdump_j__;                                                        \
+      for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
+        printf("%zu ", (p)->a[pdump_j__]);                                     \
+      printf("%zu", (p)->a[pdump_j__]);                                        \
+      fputc('|', stdout);                                                      \
+      for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
+        printf("%zu ", 1 + (i) - (p)->d[pdump_j__]);                             \
+      printf("%zu", 1 + (i) - (p)->d[pdump_j__]);                                \
+      fputc(0xA, stdout);                                                      \
+    }                                                                          \
+  } while (0)
 #define PDUMP(i, p)                                                            \
   do {                                                                         \
     if (DO_DUMP) {                                                             \
@@ -235,36 +250,85 @@ void rrsort0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
 void reversec(pbwtad *p, pbwtad *rev, size_t n) {
   for (size_t i = 0; i < n; i++) {
     rev->a[p->a[i]] = i;
-    rev->d[p->a[i]] = p->d[i];
+    rev->d[p->a[i]] = p->d[i]; // == p->d[rev->a[i]]
+    assert (rev->d[p->a[i]] == p->d[rev->a[p->a[i]]]); 
   }
 }
 
-void divc(size_t n, uint64_t *c, pbwtad *p, pbwtad *p_rev, uint64_t *x) {
+void recover_div(size_t bi) {}
+
+void divc0(size_t n, uint64_t *c, pbwtad *p) {
+  uint64_t x = 0;
+  size_t div = 0;
+  p->d[0] = 0;
+  for (size_t i = 1; i < n; i++) {
+    x = c[p->a[i]] ^ c[p->a[i-1]];
+    p->d[i] = x ? __builtin_clzll(x) : 64;
+  }
+}
+
+
+void divc(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
+          uint64_t *_x) {
   // c contains 64bit-encoded ints
   // xor of each c[s[i]] and its preceeding;
   // x[0] contains no information, previous x information is discarded;
   // here 64 is the size of the window
-  static size_t k = 1;
-
-  p->d[0] = 0;
+  static int8_t kk = 0;
+  uint64_t x = 0;
   size_t div;
-  // size_t *dprec = malloc(n * sizeof(dprec));
-  // memcpy(dprec, p->d, n * sizeof(dprec));
+  p->d[0] = 0;
 
-  // aprec 4 3 6 5 4 5 ...
-  // dprec x x x x x x ...
-  //
-  // a   4 5 2 1 6 3
-  // d   y O y y y y
-  // O = LCS(5, 4) + dprec(5)
-
+#if 0 
   for (size_t i = 1; i < n; i++) {
-    x[i] = (uint64_t)c[p->a[i]] ^ (uint64_t)c[p->a[i - 1]];
-    div = x[i] ? __builtin_clzll(x[i]) : 64;
-    p->d[i] = (div == 64) ? (p_rev->d[p->a[i]] + div) : div;
+    x = c[p->a[i]] ^ c[p->a[i - 1]];
+    div = x ? __builtin_clzll(x) : 64; // if x == 0, it means that are completly
+                                       // equal --> div = 64. otherwise ctzll
+    p->d[i] = (div == 64) ? (prev->d[p->a[i]] + div)
+                          : div; // BUG: when div == 64, it is not always true
+                                 // that (( div = (p_rev->d[p->a[i]] + div) ))
+                                 // but div could be less than above value
   }
+#else
+  // reading pbwtPrev
+  //
+  size_t bi = 0;        // Backward Index;
+  size_t pbi = 0;       // Previous Backward Index;
+  size_t mbdiv = 65535; // Minimum Backward DIVergence;
 
-  k++;
+  for (size_t i = 0; i < n; i++) {
+    
+    bi = prev->a[ppr->a[i]];
+
+    if (bi == 0) {
+      //p->d[0] = 0;
+      div = 0;
+    } else {
+      x = (c[p->a[bi]] ^ c[p->a[bi - 1]]);
+      div = (x ? __builtin_clzll(x) : 64);
+    }  
+    // printf("%zu, %zu, %zu, +++++++\n", i, bi, div);
+
+      if (div < 64) { // mismatch, nuovo carattere
+        p->d[bi] = div;
+           mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
+
+      } else { // match, stesso carattere.
+        assert (div == 64);
+        if (bi - 1 == pbi) {
+          mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
+          p->d[bi] = div + ppr->d[i];
+        } else {
+          mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
+          p->d[bi] = div + mbdiv;
+           mbdiv = 65535;
+        }
+      
+    }
+    pbi = bi;
+  }
+#endif
+  kk += W;
 }
 
 static inline pbwtad *pbwtad_new(size_t n) {
@@ -554,12 +618,12 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
   for (size_t j = 1; j < ncol;) {
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
-    size_t j = 1;
-    while (fgetcoli(fin, j, nrow, c0, 1)) {
+  size_t j = 1;
+  while (fgetcoli(fin, j, nrow, c0, 1)) {
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
-  // for (size_t j = 1; j < ncol; j++) {
+    // for (size_t j = 1; j < ncol; j++) {
     // fgetcoli(fin, j, nrow, c0, ncol);
     cpbwti(nrow, c0, p0, p1);
     PDUMP(j, p1);
@@ -654,53 +718,70 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
 
 pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   // Compute the bit-packed windows
-  uint64_t *pw = malloc(nrow * sizeof *pw);
-  size_t *aux = malloc(nrow * sizeof *aux);
+  uint64_t *w64 = malloc(nrow * sizeof *w64);
   uint64_t *xor = malloc(nrow * sizeof *xor);
+  size_t *aux = malloc(nrow * sizeof *aux);
 
-  pbwtad *p0 = pbwtad_new(nrow);
-  pbwtad *prev = pbwtad_new(nrow);
+  pbwtad *pbwt = pbwtad_new(nrow);
+  pbwtad *pbwtPr = pbwtad_new(nrow);
+  pbwtad *pbwtRev = pbwtad_new(nrow);
+  // pw is the actual windows data
 
-  fgetcoliw64r(fin, 0, nrow, pw, ncol);
-  rrsort0(nrow, pw, p0->a, aux);
-  reversec(p0, prev, nrow);
-  divc(nrow, pw, p0, prev, xor);
-  reversec(p0, prev, nrow);
-  PDUMP(W - 1, p0);
+  fgetcoliw64r(fin, 0, nrow, w64, ncol);
+  rrsort0(nrow, w64, pbwt->a, aux);
+  // reversec(pbwt, pbwtRev, nrow);
+  // divc(nrow, w64, pbwtPr, pbwt, pbwtRev, xor);
+  divc0(nrow, w64, pbwt);
+ 
+  PDUMPR(W - 1, pbwt);
+  // memcpy(pbwtPr->a , pbwt->a, nrow * sizeof *(pbwt->a));
+  // memcpy(pbwtPr->d , pbwt->d, nrow * sizeof *(pbwt->a));
+  // printf("--------fine prima it\n"); 
   // SWAP(p0, p1);
-
   size_t j;
+  size_t k = 1;
   for (j = 1; j * W <= ncol - W; j++) {
     // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
-    fgetcoliw64r(fin, j, nrow, pw, ncol);
-    rrsortx(nrow, pw, p0->a, aux);
-    reversec(p0, prev, nrow);
-    divc(nrow, pw, p0, prev, xor);
-    reversec(p0, prev, nrow);
-    PDUMP(W * (j + 1) - 1, p0);
+    fgetcoliw64r(fin, j, nrow, w64, ncol);
+    memcpy(pbwtPr->a , pbwt->a, nrow * sizeof *(pbwt->a));
+    memcpy(pbwtPr->d , pbwt->d, nrow * sizeof *(pbwt->d));   
+    rrsortx(nrow, w64, pbwt->a, aux); //BUG: pbwtPr->d doesnt contain anything.
+    // FIXME: moved reversec after rrsortx, could now be integrated in rrsortx
+    // as #1 pull request;
+    reversec(pbwt, pbwtRev, nrow);
+    // PDUMPR(W * (j + 1) - 1, pbwt);
+    divc(nrow, w64, pbwt, pbwtPr, pbwtRev,
+         xor); // FIXME: xor here can be eliminated, thus also the allocation.
+
+    // reversec(p0, prev, nrow);
+    PDUMPR(W * (j + 1) - 1, pbwt);
     // SWAP(p0, p1);
+    k++;
   }
 
   uint8_t *c0 = NULL;
 
 #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
   j *= W;
-  fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
+  fgetcolwgri(fin, j, nrow, w64, ncol, ncol - j);
 #elif defined(BF2IOMODE_BCF)
-  fgetcoliw64r(fin, j, nrow, pw, ncol);
+  fgetcoliw64r(fin, j, nrow, w64, ncol);
   j *= W;
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
   // last column needs special handling, since it is < W
   // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
-  rrsortx(nrow, pw, p0->a, aux);
-  PDUMP(ncol - 1, p0);
+  rrsortx(nrow, w64, pbwt->a, aux);
+  PDUMPR(ncol - 1, pbwt);
 
-  PBWTAD_FREE(p0);
+  PBWTAD_FREE(pbwt);
   FREE(c0);
-  FREE(pw);
-  FREE(aux);
+  FREE(pbwt);
+  FREE(pbwtRev);
+  FREE(pbwtPr);
+  FREE(w64);
+  FREE(xor);
   return NULL;
 }
 
