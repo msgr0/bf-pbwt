@@ -1,4 +1,5 @@
 #include "io.h"
+#include "tracing.h"
 #include <assert.h>
 #include <fcntl.h>
 #include <omp.h>
@@ -6,7 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "tracing.h"
 
 #ifdef BF2IOMODE_BCF
 #include "htslib/synced_bcf_reader.h"
@@ -1290,28 +1290,38 @@ int main(int argc, char *argv[]) {
     // r = linc(fin, nrow, ncol);
     TRACE(linc(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "bli") == 0) {
-    r = blinc(fin, nrow, ncol);
+    // r = blinc(fin, nrow, ncol);
+    TRACE(blinc(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "blis") == 0) {
-    r = sblinc(fd, nrow, ncol);
+    // r = sblinc(fd, nrow, ncol);
+    TRACE(sblinc(fd, nrow, ncol), r);
   } else if (strcmp(argv[1], "blim") == 0) {
     // r = mblinc(fd, nrow, ncol);
     TRACE(mblinc(fd, nrow, ncol), r);
   } else if (strcmp(argv[1], "ars") == 0) {
-    r = wapproxc_rrs(fin, nrow, ncol);
+    // r = wapproxc_rrs(fin, nrow, ncol);
+    TRACE(wapproxc_rrs(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "bar") == 0) {
-    r = wbapproxc_rrs(fin, nrow, ncol);
+    // r = wbapproxc_rrs(fin, nrow, ncol);
+    TRACE(wbapproxc_rrs(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "bars") == 0) {
-    r = swbapproxc_rrs(fd, nrow, ncol);
+    // r = swbapproxc_rrs(fd, nrow, ncol);
+    TRACE(swbapproxc_rrs(fd, nrow, ncol), r);
   } else if (strcmp(argv[1], "barm") == 0) {
-    r = mwbapproxc_rrs(fd, nrow, ncol);
+    // r = mwbapproxc_rrs(fd, nrow, ncol);
+    TRACE(mwbapproxc_rrs(fd, nrow, ncol), r);
   } else if (strcmp(argv[1], "prs") == 0) {
-    r = wparc_rrs(fin, nrow, ncol);
+    // r = wparc_rrs(fin, nrow, ncol);
+    TRACE(wparc_rrs(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "bpr") == 0) {
-    r = bwparc_rrs(fin, nrow, ncol);
+    // r = bwparc_rrs(fin, nrow, ncol);
+    TRACE(bwparc_rrs(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "spr") == 0) {
-    r = wstagparc_rrs(argv[2], nrow, ncol);
+    // r = wstagparc_rrs(argv[2], nrow, ncol);
+    TRACE(wstagparc_rrs(argv[2], nrow, ncol), r);
   } else if (strcmp(argv[1], "srs") == 0) {
-    r = wseq_rrs(fin, nrow, ncol);
+    // r = wseq_rrs(fin, nrow, ncol);
+    TRACE(wseq_rrs(fin, nrow, ncol), r);
   } else {
     fprintf(stderr, "Usage: %s %s FILE\n", argv[0], _usage_args_);
     return EXIT_FAILURE;
