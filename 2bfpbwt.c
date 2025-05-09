@@ -884,9 +884,19 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   // SWAP(p0, p1);
   size_t j;
   size_t k = 1;
-  for (j = 1; j * W <= ncol - W; j++) {
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
+  for (j = 1; j * W <= ncol - W;) {
     // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
     fgetcoliw64r(fin, j, nrow, w64, ncol);
+#elif defined(BF2IOMODE_BCF)
+  j = 1;
+  ncol = W;
+  size_t _ncol = 0;
+  while ((_ncol = fgetcoliw64r(fin, j, nrow, w64, 0)) == W) {
+    ncol += _ncol;
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
     memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
     memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
     rrsortx(nrow, w64, pbwt->a, aux); // BUG: pbwtPr->d doesnt contain anything.
@@ -903,6 +913,7 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
     PDUMPR(W * (j + 1) - 1, pbwt);
     // SWAP(p0, p1);
     k++;
+    j++;
   }
 
   uint8_t *c0 = NULL;
@@ -911,7 +922,9 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   j *= W;
   fgetcolwgri(fin, j, nrow, w64, ncol, ncol - j);
 #elif defined(BF2IOMODE_BCF)
-  fgetcoliw64r(fin, j, nrow, w64, ncol);
+  // no need to read here as it is already updated in failed condition
+  // of the reading while
+  ncol += _ncol;
   j *= W;
 #else
 #error UNDEFINED BEHAVIOUR
@@ -1122,12 +1135,20 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   }
 
   size_t j;
-  for (j = 1; j * W <= ncol - W; j++) {
-    pbwtad *ps = pb1[W - 1];
-    // pb0[W * (j + 1) - 1] = ps;
-    // memcpy(ps->a, pb0[W * j - 1]->a, nrow * sizeof *(ps->a));
-    memcpy(ps->a, pb0[W - 1]->a, nrow * sizeof *(ps->a));
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
+  for (j = 1; j * W <= ncol - W;) {
     fgetcoliw64r(fin, j, nrow, pw1, ncol);
+#elif defined(BF2IOMODE_BCF)
+  j = 1;
+  ncol = W;
+  size_t _ncol = 0;
+  while ((_ncol = fgetcoliw64r(fin, j, nrow, pw1, 0)) == W) {
+    ncol += _ncol;
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
+    pbwtad *ps = pb1[W - 1];
+    memcpy(ps->a, pb0[W - 1]->a, nrow * sizeof *(ps->a));
     rrsortx(nrow, pw1, ps->a, aux);
 
 #pragma omp parallel for shared(pw1, pw0, pb0, pb1, j)
@@ -1147,16 +1168,30 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
     PDUMP_SEQ_OFFSET(0, W, pb1, W * j - 1);
     SWAP(pw0, pw1);
     SWAP(pb0, pb1);
+    j++;
   }
 
   pbwtad *pp0, *pp1;
   pp0 = pb0[W - 1];
   pp1 = pb0[W - 2];
+
+#ifdef BF2IOMODE_BCF
+  ncol += _ncol;
+  size_t wix = 0;
+#endif
+
   for (j = j * W; j < ncol; j++) {
 #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
-    fgetcoli(fin, j, nrow, c0, 0);
+    // no need to read here as it is already updated in failed condition
+    // of the reading while
+    // WARN: if something goes wrong this should be the first place to
+    // investigate, it seems correct but I'm not 100% sure
+    for (size_t _i = 0; _i < nrow; _i++) {
+      c0[_i] = (pw1[_i] >> wix) & 0x1;
+    }
+    wix++;
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
@@ -1308,7 +1343,9 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
 
 #ifdef DBDUMP
 #pragma omp critical
-        { PDUMP(j + W, ps); }
+        {
+          PDUMP(j + W, ps);
+        }
 #endif
 
         FREE(pw);

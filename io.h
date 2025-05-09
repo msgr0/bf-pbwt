@@ -57,11 +57,11 @@ void mbfgetcoln(int fd, size_t n, uint8_t *c, size_t nc);
   void fgetcoliw##W(void *fd, size_t i, size_t n, uint64_t *c, size_t nc);     \
   void w##W##mrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,           \
                    uint64_t *c, size_t i);                                     \
-  void fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *c, size_t nc);  \
+  int fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *c, size_t nc);  \
   void wr##W##mrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,          \
                     uint64_t *c, size_t i);                                    \
   void bfgetcolw##W##rn(void *fd, size_t n, uint64_t *c, size_t nc);           \
-  void sbfgetcolw##W##rn(int fd, size_t n, uint64_t *c, size_t nc);            \
+  int sbfgetcolw##W##rn(int fd, size_t n, uint64_t *c, size_t nc);            \
   void sbfgetcolw##W##rn_mmap(int fd, size_t n, uint64_t *c, size_t nc);
 
 FGETCOLIW_DECLARE(8)
@@ -82,7 +82,7 @@ void fgetcoliwg(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
 // returing the bit-packed reversed version of lenght w
 // c[n] is a pointer to store the column,
 // nc is total number of columns
-void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
+int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
                  uint8_t w);
 
 // Buffered File GET COLumn Window General-length Reversed Next

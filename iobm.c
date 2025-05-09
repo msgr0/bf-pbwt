@@ -32,7 +32,7 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
     size_t buflines = 0;
 
     *end = '\n';
-    for (char *p = buf; (p = memchr(p, '\n', RCBUFSIZE+1)) < end; p++) {
+    for (char *p = buf; (p = memchr(p, '\n', RCBUFSIZE + 1)) < end; p++) {
       buflines++;
     }
 
@@ -204,8 +204,8 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       c[r] = (c1 << (W - i)) | (wc[r] >> i);                                   \
     }                                                                          \
   }                                                                            \
-  void fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *restrict c,     \
-                       size_t nc) {                                            \
+  int fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *restrict c,      \
+                      size_t nc) {                                             \
     uint64_t x;                                                                \
     fseek(fd, i *W, SEEK_SET);                                                 \
     for (size_t r = 0; r < n; r++) {                                           \
@@ -216,6 +216,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       }                                                                        \
       fseek(fd, nc - W + 1, SEEK_CUR);                                         \
     }                                                                          \
+    return W;                                                                  \
   }                                                                            \
   void wr##W##mrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,          \
                     uint64_t *restrict c, size_t i) {                          \
@@ -257,7 +258,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
     }                                                                          \
     i++;                                                                       \
   }                                                                            \
-  void sbfgetcolw##W##rn(int fd, size_t n, uint64_t *restrict c, size_t nc) {  \
+  int sbfgetcolw##W##rn(int fd, size_t n, uint64_t *restrict c, size_t nc) {   \
     static size_t i = 0;                                                       \
     static size_t bufn = BFGETCOLWR_BUF_SIZE;                                  \
     static uint64_t *buf = NULL;                                               \
@@ -290,6 +291,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       bufn++;                                                                  \
     }                                                                          \
     i++;                                                                       \
+    return W;                                                                  \
   }                                                                            \
   void sbfgetcolw##W##rn_mmap(int fd, size_t n, uint64_t *restrict c,          \
                               size_t nc) {                                     \
@@ -362,8 +364,8 @@ void fgetcoliwg(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   }
 }
 
-void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
-                 uint8_t w) {
+int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                uint8_t w) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
   uint64_t x;
@@ -379,6 +381,7 @@ void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
     /*printf(")=%llu\n", c[r]);*/
     fseek(fd, nc - w + 1, SEEK_CUR);
   }
+  return w;
 }
 
 void bfgetcolwgrn(void *fd, size_t n, uint64_t *restrict c, size_t nc,

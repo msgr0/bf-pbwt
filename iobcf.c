@@ -150,19 +150,19 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       c[r] = (c1 << (W - i)) | (wc[r] >> i);                                   \
     }                                                                          \
   }                                                                            \
-  void fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *restrict c,     \
-                       size_t nc) {                                            \
+  int fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *restrict c,      \
+                      size_t nc) {                                             \
     bcf_srs_t *sr = fd;                                                        \
     static bcf_hdr_t *hdr = NULL;                                              \
     if (!hdr)                                                                  \
       hdr = sr->readers[0].header;                                             \
                                                                                \
     static ssize_t _li = -1;                                                   \
-    if (i == _li + 1) {                                                        \
+    if (i == _li + 1 || !nc) {                                                 \
       memset(c, 0, n * sizeof *c);                                             \
       for (size_t wix = 0; wix < W; wix++) {                                   \
         if (!bcf_sr_next_line(sr))                                             \
-          return;                                                              \
+          return wix;                                                          \
         bcf1_t *line = bcf_sr_get_line(sr, 0);                                 \
         int32_t *gt_arr = NULL, ngt_arr = 0;                                   \
         int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);             \
@@ -183,6 +183,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       exit(26);                                                                \
     }                                                                          \
     _li = i;                                                                   \
+    return W;                                                                  \
   }                                                                            \
   void wr##W##mrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,          \
                     uint64_t *restrict c, size_t i) {                          \
@@ -195,10 +196,11 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
   void bfgetcolw##W##rn(void *fd, size_t n, uint64_t *restrict c, size_t nc) { \
     fprintf(stderr, "\e[0;33m[%s] Not Implemented Yet.\e[0m\n", __func__);     \
   }                                                                            \
-  void sbfgetcolw##W##rn(int fd, size_t n, uint64_t *restrict c, size_t nc) {  \
+  int sbfgetcolw##W##rn(int fd, size_t n, uint64_t *restrict c, size_t nc) {   \
     fputs("\e[0;33mMode not used for this type of file. Exiting.\e[0m\n",      \
           stderr);                                                             \
     exit(IOBCF_UNUSED_EXITCODE);                                               \
+    return 0;                                                                  \
   }                                                                            \
   void sbfgetcolw##W##rn_mmap(int fd, size_t n, uint64_t *restrict c,          \
                               size_t nc) {                                     \
@@ -215,8 +217,8 @@ FGETCOLIW_IMPL(64)
 void fgetcoliwg(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                 uint8_t w) {}
 
-void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
-                 uint8_t w) {
+int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                uint8_t w) {
   // NOTE: nc is not used here.
   bcf_srs_t *sr = fd;
   static bcf_hdr_t *hdr = NULL;
@@ -227,11 +229,11 @@ void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   // NOTE: Same trickery here as in `fgetcoli`, however
   // _li is not the last index or row, but the last index of window.
   // Current BCF row is (_li * w)
-  if (i == _li + 1) {
+  if (i == _li + 1 || !nc) {
     memset(c, 0, n * sizeof *c);
     for (size_t wix = 0; wix < w; wix++) {
       if (!bcf_sr_next_line(sr))
-        return;
+        return wix;
       bcf1_t *line = bcf_sr_get_line(sr, 0);
       int32_t *gt_arr = NULL, ngt_arr = 0;
       int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
@@ -257,6 +259,7 @@ void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
     exit(25);
   }
   _li = i;
+  return w;
 }
 
 void bfgetcolwgrn(void *fd, size_t n, uint64_t *restrict c, size_t nc,
