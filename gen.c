@@ -14,27 +14,24 @@ int main(int argc, char *argv[]) {
   size_t rows = atoi(argv[2]);
   size_t cols = atoi(argv[3]);
 
-  float err = 0.0;
+  float err = atof(argv[4]);
   srand(42);
 
   if (argc >= 5 && strcmp(argv[1], "enc") == 0) {
     FILE of;
     if (argc == 6) {
       of = *fopen(argv[5], "wb");
-    }
-    else {
+    } else {
       of = *stdout;
     }
-
     // printf("doing ENC\n");
-    err = atof(argv[4]);
 
     size_t padding = cols % 8;
     size_t nw = (cols / 8) + (padding > 0);
     size_t fcols = cols + 8 - padding;
 
     // we'll write rows, cols as an header
-    // if cols % 8 != 0, then we know we have to add 
+    // if cols % 8 != 0, then we know we have to add
     // a padding to reach the next_int % 8 == 0
 
     fwrite(&rows, sizeof(uint32_t), 1, &of);
@@ -44,19 +41,33 @@ int main(int argc, char *argv[]) {
 
     for (size_t i = 0; i < cols; i++) {
       frow[i] = (rand() & 1U);
-      //printf("%c", frow[i] + 48);
+      // printf("%c", frow[i] + 48);
     }
     for (size_t i = 0; i < 8 - padding; i++) {
       frow[i + cols] = 0;
     }
-    //printf("b-nw:%zu-b\n", nw);
+    // printf("b-nw:%zu-b\n", nw);
 
     char *ftcol_pack = (char *)malloc(rows * sizeof(char));
     size_t b = 0;
-    for (size_t j = 0; j < nw; j++) { // per ogni w-sized colonna
+    for (size_t j = 0; j < nw; j++) {     // per ogni w-sized colonna
       for (size_t i = 0; i < rows; i++) { // per ogni riga
-        for (size_t b = 8; b >0; b--) { // per ogni bit della w-sized colonna
-          ftcol_pack[i] = (ftcol_pack[i] << 1) | ( rand() > (int)(err * INT32_MAX) ? (frow[(j)*8 + b-1] & 1U) : (rand() & 1U) );
+        if (j == nw - 1 && padding != 0) {
+          for (size_t b = 8; b > 0; b--) {
+            int32_t test = rand();
+            int32_t r = rand();
+            ftcol_pack[i] =
+                (ftcol_pack[i] << 1) |
+                (b > padding)*(test > (int)(err * INT32_MAX) ? (frow[(j) * 8 + b - 1] & 1U)
+                                                 : (r & 1U));
+          }
+        } else {
+          for (size_t b = 8; b > 0; b--) { // per ogni bit della w-sized colonna
+            ftcol_pack[i] =
+                (ftcol_pack[i] << 1) |
+                (rand() > (int)(err * INT32_MAX) ? (frow[(j) * 8 + b - 1] & 1U)
+                                                 : (rand() & 1U));
+          }
         }
       }
       fwrite(ftcol_pack, sizeof(char), rows, &of);
