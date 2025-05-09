@@ -27,8 +27,8 @@ uint8_t DO_DUMP = 0;
       printf("%zu", (p)->a[pdump_j__]);                                        \
       fputc('|', stdout);                                                      \
       for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
-        printf("%zu ", 1 + (i) - (p)->d[pdump_j__]);                             \
-      printf("%zu", 1 + (i) - (p)->d[pdump_j__]);                                \
+        printf("%zu ", 1 + (i) - (p)->d[pdump_j__]);                           \
+      printf("%zu", 1 + (i) - (p)->d[pdump_j__]);                              \
       fputc(0xA, stdout);                                                      \
     }                                                                          \
   } while (0)
@@ -251,34 +251,93 @@ void reversec(pbwtad *p, pbwtad *rev, size_t n) {
   for (size_t i = 0; i < n; i++) {
     rev->a[p->a[i]] = i;
     rev->d[p->a[i]] = p->d[i]; // == p->d[rev->a[i]]
-    assert (rev->d[p->a[i]] == p->d[rev->a[p->a[i]]]); 
+    assert(rev->d[p->a[i]] == p->d[rev->a[p->a[i]]]);
   }
 }
 
-void recover_div(size_t bi) {}
+size_t recover_div(size_t n, size_t w, size_t i, size_t i0, uint64_t *c,
+                   pbwtad *p, pbwtad *ppr, pbwtad *prev, pbwtad *pprrev) {
+  size_t d;
+  // printf("recovering...");
+  //   printf("pprA:");
+  // for (size_t _n = 0; _n < n; _n++) {
+  //   printf("%zu,", ppr->a[_n]);
+  // }
+  // printf(" -- pprD:");
+  // for (size_t _n = 0; _n < n; _n++) {
+  //   printf("%zu,", ppr->d[_n]);
+  // }
+  //   printf("||  ppprevA:");
+  // for (size_t _n = 0; _n < n; _n++) {
+  //   printf("%zu,", pprrev->a[_n]);
+  // }
+  // printf(" -- pprrevD:");
+  // for (size_t _n = 0; _n < n; _n++) {
+  //   printf("%zu,", pprrev->d[_n]);
+  // }
+  // printf(" -- i-1: %zu, i: %zu", i0, i);
+  //
+  // printf("\n");
+
+  // if (pprrev->a[p->a[i]] == pprrev->a[p->a[i-1]] +1 ) { // if the current
+  // a[i] and a[i-1] values are one after the other in the previous a (ppr), do
+  // ... ;  ( so pprrev->a[p->a[i]] )
+  //   d = w + prev->d[p->a[i]];
+  // }
+  // else {
+  size_t min = ppr->d[pprrev->a[i]];
+  // printf("ai0: %zu, ai1: %zu", pprrev->a[p->a[i-1]], pprrev->a[p->a[i]]);
+  // devo scorrere
+  for (size_t j = (pprrev->a[i0]) + 1; j < (pprrev->a[i]); j++) {
+    // printf("j: %zu\n", j);
+    // printf("iterating j -- ");
+    if (ppr->d[j] < min) {
+      // printf("updating min... :%zu \n", min);
+      min = ppr->d[j];
+      // printf("min at j(%zu): %zu", j, min);
+    }
+    // printf("\n");
+  }
+  d = w + min;
+  // }
+  // find min in range
+  // printf("d: %zu\n", d);
+  return d;
+}
 
 void divc0(size_t n, uint64_t *c, pbwtad *p) {
   uint64_t x = 0;
   size_t div = 0;
   p->d[0] = 0;
   for (size_t i = 1; i < n; i++) {
-    x = c[p->a[i]] ^ c[p->a[i-1]];
+    x = c[p->a[i]] ^ c[p->a[i - 1]];
     p->d[i] = x ? __builtin_clzll(x) : 64;
   }
 }
 
-
-void divc(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
-          uint64_t *_x) {
+void divc_last(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
+               pbwtad *pprrev, uint64_t *_x, size_t w) {
   // c contains 64bit-encoded ints
   // xor of each c[s[i]] and its preceeding;
   // x[0] contains no information, previous x information is discarded;
   // here 64 is the size of the window
   static int8_t kk = 0;
   uint64_t x = 0;
+  // size_t w = 64;
   size_t div;
   p->d[0] = 0;
 
+#if 1
+  for (size_t i = 1; i < n; i++) {
+    x = c[p->a[i]] ^ c[p->a[i - 1]];
+    div = x ? __builtin_clzll(x) - w : w;
+    // if (div > w) div = 64 - div;
+    p->d[i] = (div >= w) ? recover_div(n, w, p->a[i], p->a[i - 1], c, p, ppr,
+                                       prev, pprrev)
+                         : div;
+  }
+
+#else
 #if 0 
   for (size_t i = 1; i < n; i++) {
     x = c[p->a[i]] ^ c[p->a[i - 1]];
@@ -295,38 +354,120 @@ void divc(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
   size_t bi = 0;        // Backward Index;
   size_t pbi = 0;       // Previous Backward Index;
   size_t mbdiv = 65535; // Minimum Backward DIVergence;
-
+                        // Stack di minimi;
+  // GOAL: mbdiv[#<64]
+  // mbdiv
+  //
   for (size_t i = 0; i < n; i++) {
-    
+
     bi = prev->a[ppr->a[i]];
 
     if (bi == 0) {
-      //p->d[0] = 0;
+      // p->d[0] = 0;
       div = 0;
     } else {
       x = (c[p->a[bi]] ^ c[p->a[bi - 1]]);
-      div = (x ? __builtin_clzll(x) : 64);
-    }  
+      div = (x ? __builtin_clzll(x)
+               : 64); // quando div < 64 --> ho una nuova finestra; # < 64
+    }
     // printf("%zu, %zu, %zu, +++++++\n", i, bi, div);
 
-      if (div < 64) { // mismatch, nuovo carattere
-        p->d[bi] = div;
-           mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
+    if (div < 64) { // mismatch, nuovo carattere
+      p->d[bi] = div;
+      // mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
 
-      } else { // match, stesso carattere.
-        assert (div == 64);
-        if (bi - 1 == pbi) {
-          mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
-          p->d[bi] = div + ppr->d[i];
-        } else {
-          mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
-          p->d[bi] = div + mbdiv;
-           mbdiv = 65535;
-        }
-      
+    } else { // match, stesso carattere.
+      assert(div == 64);
+      if (bi - 1 == pbi) {
+        // mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
+        p->d[bi] = div + ppr->d[i];
+      } else {
+        mbdiv = i ? ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
+        p->d[bi] = div + mbdiv;
+        mbdiv = 65535;
+      }
     }
     pbi = bi;
   }
+#endif
+#endif
+  kk += W;
+}
+
+void divc(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
+          pbwtad *pprrev, uint64_t *_x) {
+  // c contains 64bit-encoded ints
+  // xor of each c[s[i]] and its preceeding;
+  // x[0] contains no information, previous x information is discarded;
+  // here 64 is the size of the window
+  static int8_t kk = 0;
+  uint64_t x = 0;
+  size_t w = 64;
+  size_t div;
+  p->d[0] = 0;
+
+#if 1
+  for (size_t i = 1; i < n; i++) {
+    x = c[p->a[i]] ^ c[p->a[i - 1]];
+    div = x ? __builtin_clzll(x) : w;
+    p->d[i] = (div == w) ? recover_div(n, w, p->a[i], p->a[i - 1], c, p, ppr,
+                                       prev, pprrev)
+                         : div;
+  }
+
+#else
+#if 0 
+  for (size_t i = 1; i < n; i++) {
+    x = c[p->a[i]] ^ c[p->a[i - 1]];
+    div = x ? __builtin_clzll(x) : 64; // if x == 0, it means that are completly
+                                       // equal --> div = 64. otherwise ctzll
+    p->d[i] = (div == 64) ? (prev->d[p->a[i]] + div)
+                          : div; // BUG: when div == 64, it is not always true
+                                 // that (( div = (p_rev->d[p->a[i]] + div) ))
+                                 // but div could be less than above value
+  }
+#else
+  // reading pbwtPrev
+  //
+  size_t bi = 0;        // Backward Index;
+  size_t pbi = 0;       // Previous Backward Index;
+  size_t mbdiv = 65535; // Minimum Backward DIVergence;
+                        // Stack di minimi;
+  // GOAL: mbdiv[#<64]
+  // mbdiv
+  //
+  for (size_t i = 0; i < n; i++) {
+
+    bi = prev->a[ppr->a[i]];
+
+    if (bi == 0) {
+      // p->d[0] = 0;
+      div = 0;
+    } else {
+      x = (c[p->a[bi]] ^ c[p->a[bi - 1]]);
+      div = (x ? __builtin_clzll(x)
+               : 64); // quando div < 64 --> ho una nuova finestra; # < 64
+    }
+    // printf("%zu, %zu, %zu, +++++++\n", i, bi, div);
+
+    if (div < 64) { // mismatch, nuovo carattere
+      p->d[bi] = div;
+      // mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
+
+    } else { // match, stesso carattere.
+      assert(div == 64);
+      if (bi - 1 == pbi) {
+        // mbdiv = i ?  ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
+        p->d[bi] = div + ppr->d[i];
+      } else {
+        mbdiv = i ? ((ppr->d[i] < mbdiv) ? ppr->d[i] : mbdiv) : mbdiv;
+        p->d[bi] = div + mbdiv;
+        mbdiv = 65535;
+      }
+    }
+    pbi = bi;
+  }
+#endif
 #endif
   kk += W;
 }
@@ -725,32 +866,37 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   pbwtad *pbwt = pbwtad_new(nrow);
   pbwtad *pbwtPr = pbwtad_new(nrow);
   pbwtad *pbwtRev = pbwtad_new(nrow);
+  pbwtad *pbwtPrRev = pbwtad_new(nrow);
   // pw is the actual windows data
 
   fgetcoliw64r(fin, 0, nrow, w64, ncol);
   rrsort0(nrow, w64, pbwt->a, aux);
-  // reversec(pbwt, pbwtRev, nrow);
-  // divc(nrow, w64, pbwtPr, pbwt, pbwtRev, xor);
+  memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
+  memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
+  reversec(pbwt, pbwtRev, nrow);
   divc0(nrow, w64, pbwt);
- 
+  // divc(nrow, w64, pbwtPr, pbwt, pbwtRev, xor);
+
   PDUMPR(W - 1, pbwt);
   // memcpy(pbwtPr->a , pbwt->a, nrow * sizeof *(pbwt->a));
   // memcpy(pbwtPr->d , pbwt->d, nrow * sizeof *(pbwt->a));
-  // printf("--------fine prima it\n"); 
+  // printf("--------fine prima it\n");
   // SWAP(p0, p1);
   size_t j;
   size_t k = 1;
   for (j = 1; j * W <= ncol - W; j++) {
     // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
     fgetcoliw64r(fin, j, nrow, w64, ncol);
-    memcpy(pbwtPr->a , pbwt->a, nrow * sizeof *(pbwt->a));
-    memcpy(pbwtPr->d , pbwt->d, nrow * sizeof *(pbwt->d));   
-    rrsortx(nrow, w64, pbwt->a, aux); //BUG: pbwtPr->d doesnt contain anything.
+    memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
+    memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
+    rrsortx(nrow, w64, pbwt->a, aux); // BUG: pbwtPr->d doesnt contain anything.
     // FIXME: moved reversec after rrsortx, could now be integrated in rrsortx
     // as #1 pull request;
+    memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
+    memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
     reversec(pbwt, pbwtRev, nrow);
     // PDUMPR(W * (j + 1) - 1, pbwt);
-    divc(nrow, w64, pbwt, pbwtPr, pbwtRev,
+    divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev,
          xor); // FIXME: xor here can be eliminated, thus also the allocation.
 
     // reversec(p0, prev, nrow);
@@ -772,7 +918,15 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
 #endif
   // last column needs special handling, since it is < W
   // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
+  memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
+  memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
   rrsortx(nrow, w64, pbwt->a, aux);
+  memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
+  memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
+  reversec(pbwt, pbwtRev, nrow);
+  // PDUMPR(W * (j + 1) - 1, pbwt);
+  printf("last w has width:%zu\n", ncol - j);
+  divc_last(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, xor, ncol - j);
   PDUMPR(ncol - 1, pbwt);
 
   PBWTAD_FREE(pbwt);
@@ -780,6 +934,7 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   FREE(pbwt);
   FREE(pbwtRev);
   FREE(pbwtPr);
+  FREE(pbwtPrRev);
   FREE(w64);
   FREE(xor);
   return NULL;
