@@ -978,39 +978,71 @@ pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
 
 pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   // Compute the bit-packed windows
-  uint64_t *pw = malloc(nrow * sizeof *pw);
+  uint64_t *w64 = malloc(nrow * sizeof *w64);
+  uint64_t *xor = malloc(nrow * sizeof *xor);
   size_t *aux = malloc(nrow * sizeof *aux);
 
-  pbwtad *p0 = pbwtad_new(nrow);
-  pbwtad *p1 = pbwtad_new(nrow);
-  sbfgetcolw64rn(fin, nrow, pw, ncol);
-  rrsort0(nrow, pw, p1->a, aux);
-  PDUMP(W - 1, p1);
-  SWAP(p0, p1);
+  pbwtad *pbwt = pbwtad_new(nrow);
+  pbwtad *pbwtPr = pbwtad_new(nrow);
+  pbwtad *pbwtRev = pbwtad_new(nrow);
+  pbwtad *pbwtPrRev = pbwtad_new(nrow);
 
-  size_t j;
+  sbfgetcolw64rn(fin, nrow, w64, ncol);
+  rrsort0(nrow, w64, pbwt->a, aux);
+  memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
+  memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
+  reversec(pbwt, pbwtRev, nrow);
+  divc0(nrow, w64, pbwt);
+  PDUMPR(W - 1, pbwt);
+
+  size_t j, k = 1;
   for (j = 1; j * W <= ncol - W; j++) {
-    memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
-    sbfgetcolw64rn(fin, nrow, pw, ncol);
-    rrsortx(nrow, pw, p1->a, aux);
-    PDUMP(W * (j + 1) - 1, p1);
-    SWAP(p0, p1);
+    sbfgetcolw64rn(fin, nrow, w64, ncol);
+    memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
+    memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
+    rrsortx(nrow, w64, pbwt->a, aux); // BUG: pbwtPr->d doesnt contain anything.
+    // FIXME: moved reversec after rrsortx, could now be integrated in rrsortx
+    // as #1 pull request;
+    memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
+    memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
+    reversec(pbwt, pbwtRev, nrow);
+    // PDUMPR(W * (j + 1) - 1, pbwt);
+    divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev,
+         NULL); // FIXME: xor here can be eliminated, thus also the allocation.
+
+    // reversec(p0, prev, nrow);
+    PDUMPR(W * (j + 1) - 1, pbwt);
+    // SWAP(p0, p1);
+    k++;
   }
 
   uint8_t *c0 = NULL;
   j *= W;
-  sfgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
-  memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
-  rrsortx(nrow, pw, p1->a, aux);
-  PDUMP(ncol - 1, p1);
+  sfgetcolwgri(fin, j, nrow, w64, ncol, ncol - j);
+  
+  // last column needs special handling, since it is < W
+  // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
+  memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
+  memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
+  rrsortx(nrow, w64, pbwt->a, aux);
+  memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
+  memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
+  reversec(pbwt, pbwtRev, nrow);
+  // PDUMPR(W * (j + 1) - 1, pbwt);
+  divc_last(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, xor, ncol - j);
+  PDUMPR(ncol - 1, pbwt);
 
-  PBWTAD_FREE(p0);
-  PBWTAD_FREE(p1);
+  PBWTAD_FREE(pbwt);
   FREE(c0);
-  FREE(pw);
-  FREE(aux);
+  FREE(pbwt);
+  FREE(pbwtRev);
+  FREE(pbwtPr);
+  FREE(pbwtPrRev);
+  FREE(w64);
+  FREE(xor);
   return NULL;
 }
+
 pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
