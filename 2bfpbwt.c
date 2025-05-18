@@ -48,6 +48,23 @@ uint8_t DO_DUMP = 0;
     }                                                                          \
   } while (0)
 
+#define PDUMP_SEQR(s, e, p)                                                    \
+  do {                                                                         \
+    for (size_t pdump_ix__ = (s); pdump_ix__ < (e); pdump_ix__++) {            \
+      if (DO_DUMP) {                                                           \
+        printf("%zu:", (size_t)(pdump_ix__));                                  \
+        size_t pdump_j__;                                                      \
+        for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                 \
+          printf("%zu ", (p)[pdump_ix__]->a[pdump_j__]);                       \
+        printf("%zu", (p)[pdump_ix__]->a[pdump_j__]);                          \
+        fputc('|', stdout);                                                    \
+        for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                 \
+          printf("%zu ", 1 + (pdump_ix__) - (p)[pdump_ix__]->d[pdump_j__]);    \
+        printf("%zu", 1 + (pdump_ix__) - (p)[pdump_ix__]->d[pdump_j__]);       \
+        fputc(0xA, stdout);                                                    \
+      }                                                                        \
+    }                                                                          \
+  } while (0)
 #define PDUMP_SEQ(s, e, p)                                                     \
   do {                                                                         \
     for (size_t pdump_ix__ = (s); pdump_ix__ < (e); pdump_ix__++) {            \
@@ -65,6 +82,24 @@ uint8_t DO_DUMP = 0;
       }                                                                        \
     }                                                                          \
   } while (0)
+#define PDUMP_SEQ_OFFSETR(s, e, p, offset)                                     \
+  do {                                                                         \
+    for (size_t pdump_ix__ = (s); pdump_ix__ < (e); pdump_ix__++) {            \
+      if (DO_DUMP) {                                                           \
+        printf("%zu:", (size_t)(offset) + (size_t)(pdump_ix__));               \
+        size_t pdump_j__;                                                      \
+        for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                 \
+          printf("%zu ", (p)[pdump_ix__]->a[pdump_j__]);                       \
+        printf("%zu", (p)[pdump_ix__]->a[pdump_j__]);                          \
+        fputc('|', stdout);                                                    \
+        for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                 \
+          printf("%zu ", 1 + (offset) - (p)[pdump_ix__]->d[pdump_j__]);        \
+        printf("%zu", 1 + (offset) - (p)[pdump_ix__]->d[pdump_j__]);           \
+        fputc(0xA, stdout);                                                    \
+      }                                                                        \
+    }                                                                          \
+  } while (0)
+
 #define PDUMP_SEQ_OFFSET(s, e, p, offset)                                      \
   do {                                                                         \
     for (size_t pdump_ix__ = (s); pdump_ix__ < (e); pdump_ix__++) {            \
@@ -156,7 +191,7 @@ void rrsortx(size_t n, uint64_t *c, size_t *s, size_t *aux) {
 
 /*
  * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
- * using externally allocated `aux[n]` auxiliary array.
+ * without using externally allocated `aux[n]` auxiliary array.
  * This version assumes the `s` array to be already initialized.
  */
 void rrsortx_noaux(size_t n, uint64_t *c, size_t *s) {
@@ -247,6 +282,16 @@ void rrsort0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
     post = tmp;
   }
 }
+
+
+
+/* Compute *p's reverse auxiliary pbwt arrays in *rev
+ * rev->a[i] contains the position of row #i in in p->a[]
+ * rev->a[p->a[i]] = i = p->a[rev->a[i]]  
+ *
+ * rev->d[i] instead contains the divergence of row i in p->a[]
+ * rev->d[p->a[i]] = p->d[i] = p->d[rev->a[p->a[i]]] 
+ */
 void reversec(pbwtad *p, pbwtad *rev, size_t n) {
   for (size_t i = 0; i < n; i++) {
     rev->a[p->a[i]] = i;
@@ -254,57 +299,43 @@ void reversec(pbwtad *p, pbwtad *rev, size_t n) {
     assert(rev->d[p->a[i]] == p->d[rev->a[p->a[i]]]);
   }
 }
+/* 
+ * Same as above reverse sec, but provide the previous divergenc
+ * FIXME: check if values are actually correct
+ */
+void reversecprev(pbwtad *p, pbwtad *pp, pbwtad *rev, size_t n) {
+  for (size_t i = 0; i < n; i++) {
+    rev->a[p->a[i]] = i;
+    rev->d[p->a[i]] = pp->d[i]; // == p->d[rev->a[i]]
+    // assert(rev->d[p->a[i]] == pp->d[rev->a[p->a[i]]]);
+  }
+}
 
+/*
+ * Recover divergence of a match possibly longer than W.
+ * Iterates over the range between previous and current row in p->a
+ * using the previous pbwt array. Compute correct divergence using 
+ * reverse arrays computed by reversec
+ * FIXME: prev (current pbwt reverse) is not used, consider not memcpy in
+ * wapprox computation if not needed.
+ */
 size_t recover_div(size_t n, size_t w, size_t i, size_t i0, uint64_t *c,
                    pbwtad *p, pbwtad *ppr, pbwtad *prev, pbwtad *pprrev) {
-  size_t d;
-  // printf("recovering...");
-  //   printf("pprA:");
-  // for (size_t _n = 0; _n < n; _n++) {
-  //   printf("%zu,", ppr->a[_n]);
-  // }
-  // printf(" -- pprD:");
-  // for (size_t _n = 0; _n < n; _n++) {
-  //   printf("%zu,", ppr->d[_n]);
-  // }
-  //   printf("||  ppprevA:");
-  // for (size_t _n = 0; _n < n; _n++) {
-  //   printf("%zu,", pprrev->a[_n]);
-  // }
-  // printf(" -- pprrevD:");
-  // for (size_t _n = 0; _n < n; _n++) {
-  //   printf("%zu,", pprrev->d[_n]);
-  // }
-  // printf(" -- i-1: %zu, i: %zu", i0, i);
-  //
-  // printf("\n");
 
-  // if (pprrev->a[p->a[i]] == pprrev->a[p->a[i-1]] +1 ) { // if the current
-  // a[i] and a[i-1] values are one after the other in the previous a (ppr), do
-  // ... ;  ( so pprrev->a[p->a[i]] )
-  //   d = w + prev->d[p->a[i]];
-  // }
-  // else {
+  size_t d;
   size_t min = ppr->d[pprrev->a[i]];
-  // printf("ai0: %zu, ai1: %zu", pprrev->a[p->a[i-1]], pprrev->a[p->a[i]]);
-  // devo scorrere
   for (size_t j = (pprrev->a[i0]) + 1; j < (pprrev->a[i]); j++) {
-    // printf("j: %zu\n", j);
-    // printf("iterating j -- ");
     if (ppr->d[j] < min) {
-      // printf("updating min... :%zu \n", min);
       min = ppr->d[j];
-      // printf("min at j(%zu): %zu", j, min);
     }
-    // printf("\n");
   }
   d = w + min;
-  // }
-  // find min in range
-  // printf("d: %zu\n", d);
   return d;
 }
 
+/*
+ * compute the divergence of the first w64 windows
+ */
 void divc0(size_t n, uint64_t *c, pbwtad *p) {
   uint64_t x = 0;
   size_t div = 0;
@@ -315,29 +346,30 @@ void divc0(size_t n, uint64_t *c, pbwtad *p) {
   }
 }
 
+/* 
+ * computes the divergence of the last <=64 window (hence it could be padded
+ */
 void divc_last(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
-               pbwtad *pprrev, uint64_t *_x, size_t w) {
-  // c contains 64bit-encoded ints
-  // xor of each c[s[i]] and its preceeding;
-  // x[0] contains no information, previous x information is discarded;
-  // here 64 is the size of the window
+               pbwtad *pprrev,
+               size_t w) { // FIXME: afteer some correction code seems to be
+                           // similar to divc(), check and merge
   static int8_t kk = 0;
   uint64_t x = 0;
   // size_t w = 64;
   size_t div;
   p->d[0] = 0;
-
 #if 1
   for (size_t i = 1; i < n; i++) {
     x = c[p->a[i]] ^ c[p->a[i - 1]];
-    div = x ? __builtin_clzll(x) - w : w;
+    div = x ? __builtin_clzll(x) - (W - w) : w;
     // if (div > w) div = 64 - div;
     p->d[i] = (div >= w) ? recover_div(n, w, p->a[i], p->a[i - 1], c, p, ppr,
                                        prev, pprrev)
                          : div;
   }
 
-#else
+#else // FIXME: old bugged "uncomplete" computation of div. Check and remove
+  // at next it.
 #if 0 
   for (size_t i = 1; i < n; i++) {
     x = c[p->a[i]] ^ c[p->a[i - 1]];
@@ -347,6 +379,7 @@ void divc_last(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
                           : div; // BUG: when div == 64, it is not always true
                                  // that (( div = (p_rev->d[p->a[i]] + div) ))
                                  // but div could be less than above value
+                                 // it has been FIXED with function recover_dir
   }
 #else
   // reading pbwtPrev
@@ -393,9 +426,12 @@ void divc_last(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
 #endif
   kk += W;
 }
-
+/*
+ * Computes the divergence of a generic w64 window;
+ * LCP values equal to the window size get recoverd by recover_div function
+ */
 void divc(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
-          pbwtad *pprrev, uint64_t *_x) {
+          pbwtad *pprrev) {
   // c contains 64bit-encoded ints
   // xor of each c[s[i]] and its preceeding;
   // x[0] contains no information, previous x information is discarded;
@@ -415,7 +451,7 @@ void divc(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
                          : div;
   }
 
-#else
+#else //FIXME: as divc_last, check and remove at next it
 #if 0 
   for (size_t i = 1; i < n; i++) {
     x = c[p->a[i]] ^ c[p->a[i - 1]];
@@ -489,7 +525,7 @@ static inline pbwtad *pbwtad_new(size_t n) {
     FREE(p);                                                                   \
   } while (0)
 
-// msgr0's version
+// msgr0's version (Durbin's linear pbwt)
 // c[n] is a pointer to the column
 // p is the `pbwtad` of A and D arrays of the previous column
 // return: `pbwtad` of the current column
@@ -551,6 +587,78 @@ pbwtad *cpbwt_0(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
 
   ret->a = a;
   ret->d = d;
+  return ret;
+}
+
+/* 
+ * Given the current column index, swaps divergence values
+ * between LCP and starting position of a match.
+ *
+ * Window computation is currently written using LCP values,
+ * i.e. length of the actual longest co-lexicographical match
+ * between p->a[i] and p->a[i-1],
+ * while linear computation relis on "classical" divergence 
+ * definition of "starting position of the longest match
+ * between p->a[i] and p->a[i-1]
+ * 
+ * For tesing only during development phase
+ */
+void swapdiv(pbwtad *p, size_t n, size_t k) {
+  for (size_t t = 0; t < n; t++) {
+    p->d[t] = 1 + k - p->d[t];
+  }
+}
+
+/* BUG: (possibily?, needs testing)
+ * use cpbwt std version (withtout *LCP) and then swap divergence
+ * with swapdiv if necessary.
+ */
+static pbwtad *cpbwtLCP(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
+  static size_t *o = NULL;
+  static size_t *h = NULL;
+  static size_t k = 1;
+
+  if (!o)
+    o = malloc(n * sizeof *o);
+  if (!h)
+    h = malloc(n * sizeof *h);
+
+  pbwtad *ret = malloc(sizeof *ret);
+  ret->a = malloc(n * sizeof *(ret->a));
+  ret->d = malloc(n * sizeof *(ret->d));
+
+  size_t r = 0, q = 0;
+  size_t f = k, g = k;
+
+  size_t i;
+  for (i = 0; i < n; i++) {
+    size_t idx = p->a[i];
+    size_t ddx = p->d[i];
+
+    f = (ddx > f) ? ddx : f;
+    g = (ddx > g) ? ddx : g;
+
+    size_t mask = c[idx];
+    o[q] = idx;
+    ret->a[r] = idx;
+    h[q] = g;
+    ret->d[r] = f;
+
+    f &= -mask;       // f = 0 if mask == 0, unchanged if mask == 1
+    g &= -(1 - mask); // g = 0 if mask == 1, unchanged if mask == 0
+    q += mask;        // Increment q if mask is 1
+    r += mask ^ 1;    // Increment r if mask is 0
+  }
+  memcpy(ret->a + r, o, q * sizeof(size_t));
+  memcpy(ret->d + r, h, q * sizeof(size_t));
+
+  // correct div computation for DIV as LCP
+  //
+  for (size_t t = 0; t < n; t++) {
+    ret->d[t] = 1 + k - ret->d[t];
+  }
+  k++;
+
   return ret;
 }
 
@@ -620,6 +728,54 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   return ret;
 }
 
+/* BUG: (possibily?, needs testing)
+ * use cpbwt std version (withtout *LCP) and then swap divergence
+ * with swapdiv if necessary.
+ */
+static int cpbwtiLCP(size_t n, uint8_t *restrict c, pbwtad *restrict pp,
+                     pbwtad *restrict pc) {
+  static size_t *o = NULL;
+  static size_t *h = NULL;
+  static size_t k = 1;
+
+  if (!o)
+    o = malloc(n * sizeof *o);
+  if (!h)
+    h = malloc(n * sizeof *h);
+
+  size_t r = 0, q = 0;
+  size_t f = k, g = k;
+
+  size_t i;
+  for (i = 0; i < n; i++) {
+    size_t idx = pp->a[i];
+    size_t ddx = pp->d[i];
+
+    f = (ddx > f) ? ddx : f;
+    g = (ddx > g) ? ddx : g;
+
+    size_t mask = c[idx];
+    o[q] = idx;
+    pc->a[r] = idx;
+    h[q] = g;
+    pc->d[r] = f;
+
+    f &= -mask;       // f = 0 if mask == 0, unchanged if mask == 1
+    g &= -(1 - mask); // g = 0 if mask == 1, unchanged if mask == 0
+    q += mask;        // Increment q if mask is 1
+    r += mask ^ 1;    // Increment r if mask is 0
+  }
+
+  memcpy(pc->a + r, o, q * sizeof(size_t));
+  memcpy(pc->d + r, h, q * sizeof(size_t));
+
+  for (size_t t = 0; t < n; t++) {
+    pc->d[t] = k - pc->d[t];
+  }
+  k++;
+
+  return 1;
+}
 static int cpbwti(size_t n, uint8_t *restrict c, pbwtad *restrict pp,
                   pbwtad *restrict pc) {
   static size_t *o = NULL;
@@ -859,29 +1015,24 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
 
 pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   // Compute the bit-packed windows
-  uint64_t *w64 = malloc(nrow * sizeof *w64);
-  uint64_t *xor = malloc(nrow * sizeof *xor);
+  uint64_t *w64 = malloc(nrow * sizeof *w64); //window data collected by fgetcoliw64r
   size_t *aux = malloc(nrow * sizeof *aux);
 
-  pbwtad *pbwt = pbwtad_new(nrow);
-  pbwtad *pbwtPr = pbwtad_new(nrow);
-  pbwtad *pbwtRev = pbwtad_new(nrow);
-  pbwtad *pbwtPrRev = pbwtad_new(nrow);
-  // pw is the actual windows data
+  pbwtad *pbwt = pbwtad_new(nrow); //curr pbwt
+  pbwtad *pbwtPr = pbwtad_new(nrow); //prev pbwt
+  pbwtad *pbwtRev = pbwtad_new(nrow); // curr pbwt REVERSE
+  pbwtad *pbwtPrRev = pbwtad_new(nrow); // prev pbwt REVERSE
 
   fgetcoliw64r(fin, 0, nrow, w64, ncol);
   rrsort0(nrow, w64, pbwt->a, aux);
+  // FIXME: following 2 memcpy(s) dump current pbwtRev (empty??) into pbwtPrRev
+  // probably useless, both arrays should be initialized.
   memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
   memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
   reversec(pbwt, pbwtRev, nrow);
   divc0(nrow, w64, pbwt);
-  // divc(nrow, w64, pbwtPr, pbwt, pbwtRev, xor);
 
   PDUMPR(W - 1, pbwt);
-  // memcpy(pbwtPr->a , pbwt->a, nrow * sizeof *(pbwt->a));
-  // memcpy(pbwtPr->d , pbwt->d, nrow * sizeof *(pbwt->a));
-  // printf("--------fine prima it\n");
-  // SWAP(p0, p1);
   size_t j;
   size_t k = 1;
 #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
@@ -899,25 +1050,19 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
 #endif
     memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
     memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
-    rrsortx(nrow, w64, pbwt->a, aux); // BUG: pbwtPr->d doesnt contain anything.
-    // FIXME: moved reversec after rrsortx, could now be integrated in rrsortx
-    // as #1 pull request;
     memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
     memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
-    reversec(pbwt, pbwtRev, nrow);
-    // PDUMPR(W * (j + 1) - 1, pbwt);
-    divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev,
-         xor); // FIXME: xor here can be eliminated, thus also the allocation.
-
-    // reversec(p0, prev, nrow);
+    rrsortx(nrow, w64, pbwt->a, aux); // radix sorting pbwt->a with auxiliary array
+    reversec(pbwt, pbwtRev, nrow); // computing reversec after sorting the new array
+    divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev); //FIXME: check divc comment, pbwtRev could be removed.
     PDUMPR(W * (j + 1) - 1, pbwt);
-    // SWAP(p0, p1);
     k++;
     j++;
   }
 
   uint8_t *c0 = NULL;
-
+  
+  // LAST WINDOW
 #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
   j *= W;
   fgetcolwgri(fin, j, nrow, w64, ncol, ncol - j);
@@ -939,17 +1084,17 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   reversec(pbwt, pbwtRev, nrow);
   // PDUMPR(W * (j + 1) - 1, pbwt);
   printf("last w has width:%zu\n", ncol - j);
-  divc_last(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, xor, ncol - j);
+  divc_last(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, ncol - j);
   PDUMPR(ncol - 1, pbwt);
 
   PBWTAD_FREE(pbwt);
-  FREE(c0);
+  // FREE(c0);
   FREE(pbwt);
   FREE(pbwtRev);
   FREE(pbwtPr);
   FREE(pbwtPrRev);
   FREE(w64);
-  FREE(xor);
+  FREE(aux);
   return NULL;
 }
 
@@ -1088,6 +1233,139 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   FREE(c0);
   FREE(pw);
   FREE(aux);
+  return NULL;
+}
+
+pbwtad **wparc_rrs2(void *fin, size_t nrow, size_t ncol) {
+  // pair of windows, pbwt for each column
+  pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb1 = malloc(W * sizeof(pbwtad *));
+
+  // pair of windows, pbwtReverse for each column
+  pbwtad **pbr0 = malloc(W * sizeof(pbwtad *));
+  pbwtad **pbr1 = malloc(W * sizeof(pbwtad *));
+
+  // 0-column initialization
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  pbwtad *p0 = pbwtad_new(nrow);
+  for (int j = 0; j < nrow; j++) {
+    p0->a[j] = j;
+    p0->d[j] = 0;
+  }
+
+  // 1st-column computation
+  fgetcoli(fin, 0, nrow, c0, ncol);
+  pb0[0] = cpbwt(nrow, c0, p0);
+  pbr0[0] = pbwtad_new(nrow);
+  reversecprev(pb0[0], p0, pbr0[0], nrow);
+
+  PDUMP(0, pb0[0]);
+  PBWTAD_FREE(p0);
+
+  for (int j = 1; j < W; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
+    pbr0[j] = pbwtad_new(nrow);
+    reversecprev(pb0[j], pb0[j - 1], pbr0[j], nrow);
+    PDUMP(j, pb0[j]);
+  }
+
+  // pair of w-sized windows to read from file as uint64s
+  uint64_t *pw0 = malloc(nrow * sizeof *pw0);
+  uint64_t *pw1 = malloc(nrow * sizeof *pw1);
+
+  size_t *aux = malloc(nrow * sizeof *aux);
+  fgetcoliw64r(fin, 0, nrow, pw0, ncol);
+
+  // pb0 is now filled with computed values,
+  // to allow reusing I need to fill pb1 and pb1r with empty values
+  for (int j = 0; j < W; j++) {
+    pb1[j] = pbwtad_new(nrow);
+    // memcpy(pb1[j], pb0[j], nrow * sizeof *(pb1[j]->a));
+    pbr1[j] = pbwtad_new(nrow);
+    // memcpy(pbr1[j], pbr0[j], nrow * sizeof *(pbr1[j]->a));
+  }
+  
+  size_t j;
+  for (j = 0; j < W; j++) {
+    swapdiv(pb0[j], nrow, j);
+    // swapdiv(pbr0[j], nrow, j);
+  }
+
+  for (j = 1; j * W <= ncol - W  ; j++) {
+    pbwtad *ps = pb0[W - 1];
+    pbwtad *psrev = pbr0[W - 1];
+    pbwtad *psn = pb1[W - 1];
+    pbwtad *psnrev = pbr1[W - 1];
+    memcpy(ps->a, psn->a, nrow * sizeof *(ps->a)); // pbwtPR into pbwt a
+    memcpy(ps->d, psn->d, nrow * sizeof *(ps->a)); // ---------------- d
+    fgetcoliw64r(fin, j, nrow, pw1, ncol);
+    rrsortx(nrow, pw1, psn->a, aux);
+    memcpy(psrev->a, psnrev->a, nrow * sizeof *(psrev->a));
+    memcpy(psrev->d, psnrev->d, nrow * sizeof *(psrev->a));
+    printf("guardE\n");
+    reversec(psn, psnrev, nrow);
+    divc(nrow, pw1, psn, ps, psnrev, psrev);
+    // PDUMPR(j*W, psn);
+    printf("w computed\n");
+  
+#if 1
+#pragma omp parallel for shared(pw1, pw0, pb1, pb0, pbr1, pbr0, j)
+    for (size_t x = 1; x < W; x++) {
+      uint64_t *w = malloc(nrow * sizeof *w);
+      // size_t J = W * (j + 1) - 1;
+      size_t J = W - 1;
+
+      wr64mrgsi(nrow, pw1, pw0, w, x);
+      // pbwtad *ps = pbwtad_new(nrow);
+      pbwtad *ps = pb0[J - x];
+      pbwtad *psrev = pbr0[J - x];
+    pbwtad *psn = pb1[J - x];
+    pbwtad *psnrev = pbr1[J - x];
+      // pb0[J - x] = ps;
+    memcpy(ps->a, psn->a, nrow * sizeof *(ps->a)); // pbwtPR into pbwt a
+    memcpy(ps->d, psn->d, nrow * sizeof *(ps->a)); // ---------------- d
+    fgetcoliw64r(fin, j, nrow, pw1, ncol);
+    rrsortx_noaux(nrow, w, psn->a);
+    memcpy(psrev->a, psnrev->a, nrow * sizeof *(psrev->a));
+    memcpy(psrev->d, psnrev->d, nrow * sizeof *(psrev->a));
+      reversec(psn, psnrev, nrow);
+      divc(nrow, w, psn, ps, psnrev, psrev) ;
+      FREE(w);
+    }
+    size_t i = j;
+    printf("pdump guard-1\n");
+    PDUMP_SEQ_OFFSETR(0, W, pb1, W * j);
+    printf("pdump guard-2\n");
+    // PDUMP_SEQ_OFFSET(0, W, pb1, W * j );
+    // SWAP(pw0, pw1);
+    // SWAP(pb0, pb1);
+    // SWAP(pbr0, pbr1);
+  }
+
+  pbwtad *pp0, *pp1;
+  pp0 = pb0[W - 1];
+  pp1 = pb0[W - 2];
+  for (j = j * W; j < ncol; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    cpbwtiLCP(nrow, c0, pp0, pp1);
+    printf("pdump guard\n");
+    PDUMP(j, pp1);
+    SWAP(pp0, pp1);
+  }
+
+  return NULL;
+  for (int j = 0; j < W; j++) {
+    PBWTAD_FREE(pb0[j]);
+    PBWTAD_FREE(pb1[j]);
+  }
+  FREE(pb0);
+  FREE(pb1);
+  FREE(pw0);
+  FREE(pw1);
+  FREE(aux);
+  FREE(c0);
+#endif
   return NULL;
 }
 
@@ -1537,6 +1815,8 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "prs") == 0) {
     // r = wparc_rrs(fin, nrow, ncol);
     TRACE(wparc_rrs(fin, nrow, ncol), r);
+  } else if (strcmp(argv[1], "prs2") == 0) {
+    TRACE(wparc_rrs2(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "bpr") == 0) {
     // r = bwparc_rrs(fin, nrow, ncol);
     TRACE(bwparc_rrs(fin, nrow, ncol), r);
