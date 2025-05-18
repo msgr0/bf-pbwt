@@ -1,8 +1,7 @@
 // vim:ft=c
 #include "io.h"
-#include <string.h>
 #include <assert.h>
-
+#include <string.h>
 
 #define HEADER_BYTES 2
 
@@ -73,7 +72,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
   void fgetcoliw##W(void *fd, size_t i, size_t n, uint64_t *restrict c,        \
                     size_t nc) {                                               \
     int x;                                                                     \
-    assert(W % 8 == 0);                                                         \
+    assert(W % 8 == 0);                                                        \
     size_t mult = W / 8;                                                       \
     do {                                                                       \
       fread(c, sizeof(uint8_t), n, fd);                                        \
@@ -87,14 +86,15 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       c[r] = (c1 << (W - i)) | (wc[r] >> i);                                   \
     }                                                                          \
   }                                                                            \
-  void fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *restrict c,     \
-                       size_t nc) {                                            \
+  int fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *restrict c,      \
+                      size_t nc) {                                             \
     int x;                                                                     \
-    assert(W % 8 == 0);                                                         \
+    assert(W % 8 == 0);                                                        \
     size_t mult = W / 8;                                                       \
     do {                                                                       \
       fread(c, sizeof(uint8_t), n, fd);                                        \
     } while (--mult);                                                          \
+    return 1;                                                                  \
   }                                                                            \
   void wr##W##mrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,          \
                     uint64_t *restrict c, size_t i) {                          \
@@ -114,7 +114,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
                                                                                \
     if (bufn == BFGETCOLWR_BUF_SIZE) {                                         \
       uint64_t x;                                                              \
-      fseek(fd, i * W, SEEK_SET);                                              \
+      fseek(fd, i *W, SEEK_SET);                                               \
       for (size_t r = 0; r < n; r++) {                                         \
         fread(&rbuf, 1, 64 * BFGETCOLWR_BUF_SIZE, fd);                         \
         for (size_t s = 0; s < BFGETCOLWR_BUF_SIZE; s++) {                     \
@@ -136,7 +136,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
     }                                                                          \
     i++;                                                                       \
   }                                                                            \
-  void sbfgetcolw##W##rn(int fd, size_t n, uint64_t *restrict c, size_t nc) {  \
+  int sbfgetcolw##W##rn(int fd, size_t n, uint64_t *restrict c, size_t nc) {   \
     static size_t i = 0;                                                       \
     static size_t bufn = BFGETCOLWR_BUF_SIZE;                                  \
     static uint64_t *buf = NULL;                                               \
@@ -169,6 +169,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
       bufn++;                                                                  \
     }                                                                          \
     i++;                                                                       \
+    return 1;                                                                  \
   }                                                                            \
   void sbfgetcolw##W##rn_mmap(int fd, size_t n, uint64_t *restrict c,          \
                               size_t nc) {                                     \
@@ -240,8 +241,8 @@ void fgetcoliwg(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   fseek(fd, nc - w + 1, SEEK_CUR);
 }
 
-void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
-                 uint8_t w) {
+int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                uint8_t w) {
   // uint64_t x;
   // fseek(fd, i * w, SEEK_SET);
   // for (size_t r = 0; r < n; r++) {
@@ -255,6 +256,7 @@ void fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   //   /*printf(")=%llu\n", c[r]);*/
   //   fseek(fd, nc - w + 1, SEEK_CUR);
   // }
+  return 1;
 }
 
 void bfgetcolwgrn(void *fd, size_t n, uint64_t *restrict c, size_t nc,
