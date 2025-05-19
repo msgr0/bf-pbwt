@@ -733,19 +733,22 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
  * use cpbwt std version (withtout *LCP) and then swap divergence
  * with swapdiv if necessary.
  */
-static int cpbwtiLCP(size_t n, uint8_t *restrict c, pbwtad *restrict pp,
+static int cpbwtiLCP(size_t n, size_t k, uint8_t *restrict c, pbwtad *restrict pp,
                      pbwtad *restrict pc) {
   static size_t *o = NULL;
   static size_t *h = NULL;
-  static size_t k = 1;
+  // static size_t k = 1;
 
+  swapdiv(pp, n, k-1);
+  size_t nrow = n;
+  // PDUMP(k, pp);
   if (!o)
     o = malloc(n * sizeof *o);
   if (!h)
     h = malloc(n * sizeof *h);
 
   size_t r = 0, q = 0;
-  size_t f = k, g = k;
+  size_t f = k+1, g = k+1;
 
   size_t i;
   for (i = 0; i < n; i++) {
@@ -770,13 +773,11 @@ static int cpbwtiLCP(size_t n, uint8_t *restrict c, pbwtad *restrict pp,
   memcpy(pc->a + r, o, q * sizeof(size_t));
   memcpy(pc->d + r, h, q * sizeof(size_t));
 
-  for (size_t t = 0; t < n; t++) {
-    pc->d[t] = k - pc->d[t];
-  }
-  k++;
-
+  PDUMP(k, pc);
+  swapdiv(pc, n, k);
   return 1;
 }
+
 static int cpbwti(size_t n, uint8_t *restrict c, pbwtad *restrict pp,
                   pbwtad *restrict pc) {
   static size_t *o = NULL;
@@ -1366,9 +1367,9 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
-    if ((j/W) % W == 3) swapdiv(pp1, nrow, j);
-    if ((j/W) % W == 2) swapdiv(pp0, nrow, j);
-    cpbwti(nrow, c0, pp0, pp1);
+    // if ((j/W) % W == 3) swapdiv(pp1, nrow, j);
+    // if ((j/W) % W == 2) swapdiv(pp0, nrow, j);
+    cpbwtiLCP(nrow,  j, c0, pp0, pp1);
     PDUMP(j, pp1);
     SWAP(pp0, pp1);
   }
