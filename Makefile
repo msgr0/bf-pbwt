@@ -28,19 +28,28 @@ debug: CFLAGS=-O0 -g
 %.o: %.c %.h
 	${CC} -c ${CFLAGS} ${CCINCL} $< -o $@
 
+2bfpbwt-enc: CCINCL=${LIBOMP_INCL}
+2bfpbwt-enc: 2bfpbwt.c ioenc.o
+	${CC} -o $@ ${CFLAGS} -DBF2IOMODE_ENC ${CCINCL} $(LDFLAGS) $^ 
+
 2bfpbwt-bm: CCINCL=${LIBOMP_INCL}
 2bfpbwt-bm: 2bfpbwt.c iobm.o
 	${CC} -o $@ ${CFLAGS} -DBF2IOMODE_BM ${CCINCL} $(LDFLAGS) $^ 
 
 iobcf.o: iobcf.c
 	${CC} -c ${CFLAGS} ${HTSLIB_INCL} $< -o $@ -lhts
+
 2bfpbwt-bcf: CCINCL=${LIBOMP_INCL} ${HTSLIB_INCL}
 2bfpbwt-bcf: 2bfpbwt.c iobcf.o
 	${CC} -o $@ ${CFLAGS} -DBF2IOMODE_BCF ${CCINCL} $(LDFLAGS) -lhts $^ 
 
 gen: gen.c
 	${CC} -O3 $^ -o $@
-	
+
+bcf2enc: CCINCL=${HTSLIB_INCL}
+bcf2enc: bcftoenc.c 
+	${CC} -o $@ ${CCINCL} -lhts $^
+
 clean:
 	-rm *.o $(ALL)
 
