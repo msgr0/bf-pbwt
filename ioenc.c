@@ -13,12 +13,12 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
   *nc = *nr = 0;
   fread(nr, sizeof(uint32_t), 1, fd);
   fread(nc, sizeof(uint32_t), 1, fd);
-
+  size_t nfc = 0; 
   // true column size in the file with padding
-  (*nc) += ((*nc) % 8) ? (8 - (*nc) % 8) : 0;
+  nfc = (*nc) + (((*nc) % 8) ? (8 - (*nc) % 8) : 0);
   // (*nc) = ((8* (*nc))+7) / 8;
-  printf("%zu\n", *nr);
-  printf("%zu\n", (*nc));
+  printf("rows: %zu, fileCols: %zu, headerCols: %zu\n", *nr, *nc, nfc );
+  (*nc) = nfc;
 
   // count byte frequency -- possibile alphabet encoding as in syllable?
 
@@ -225,20 +225,26 @@ FGETCOLIW_IMPL(64)
 
 void fgetcoliwg(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                 uint8_t w) {
-  int x;
-  size_t ie = i / 8;
-  size_t off = i % 8;
-  assert(w % 8 == 0); // supporting only windows mult of 8;
-  size_t mult = w / 8;
-  fseek(fd, 2 + (ie * mult) * n, SEEK_SET);
-  for (size_t t = 0; t < mult; t++) {
-    fread(c, sizeof(uint8_t), n, fd);
-    for (size_t j = 0; j < n; j++) {
-      c[t] = (c[t] << 8);
+  
+  /// enc file is presented 1byte (8cols) of nrows at time, 
+  /// w is the generic window size, must be a multiple of 8
+  /// Current i serves for seeking, but currently we can assume no jumps
+  /// on the file. 
+
+  size_t wmult = w/8; // how many time we have to grab nrows
+  assert( w%8 ==0);
+  
+  uint8_t *crow = malloc(n * sizeof(uint8_t));
+  
+  for (size_t t = 0; t < wmult; t++) { 
+    for (size_t j = 0; j < n-1; j++) {
+    fread (crow, sizeof(uint8_t), n, fd);
+      c[j] = (c[j] << 8)  | (crow[j]); 
     }
+    fread (crow, sizeof(uint8_t), n, fd);
+    c[n-2] |= crow[n-2];
   }
-  fread(c, sizeof(uint8_t), n, fd);
-  fseek(fd, nc - w + 1, SEEK_CUR);
+
 }
 
 int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
