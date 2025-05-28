@@ -22,15 +22,21 @@ Known issues:
 - `bpr`: not implemented
 - `spr`: not implemented, this is very tricky
 
-## BM (modified preprocess) roadmap:
-- `lin`: ?
+## ENC (64bit encoding) roadmap:
+```bash
+xxx=ars
+./bcf2enc file.bcf file.em
+./2bfpbwt $xxx file.em
+```
+
+- `lin`: w.i.p.
 - `bli`: ?
-- `blis`: ?
-- `blim`: ?
-- `ars`: ?
+- `blis`: not relevant (?)
+- `blim`: not relevant (?)
+- `ars`: implemented, check last computation of last window
 - `bar`: ?
-- `bars`: ?
-- `barm`: ?
-- `prs`: ?
+- `bars`: not relevant (?)
+- `barm`: not relevant (?)
+- `prs`: w.i.p.
 - `bpr`: ?
 - `spr`: ?
