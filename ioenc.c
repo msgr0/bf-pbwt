@@ -4,6 +4,8 @@
 #include <string.h>
 
 #define HEADER_BYTES 2
+#define WENC 64
+typedef uint64_t uw_t;
 
 #ifndef IOENC_UNUSED_EXITCODE
 #define IOENC_UNUSED_EXITCODE 3
@@ -13,31 +15,12 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
   *nc = *nr = 0;
   fread(nr, sizeof(uint32_t), 1, fd);
   fread(nc, sizeof(uint32_t), 1, fd);
-  size_t nfc = 0; 
+  size_t nfc = 0;
   // true column size in the file with padding
   nfc = (*nc) + (((*nc) % 8) ? (8 - (*nc) % 8) : 0);
   // (*nc) = ((8* (*nc))+7) / 8;
-  printf("rows: %zu, fileCols: %zu, headerCols: %zu\n", *nr, *nc, nfc );
+  printf("rows: %zu, fileCols: %zu, headerCols: %zu\n", *nr, *nc, nfc);
   (*nc) = nfc;
-
-  // count byte frequency -- possibile alphabet encoding as in syllable?
-
-  // uint64_t freq[256];
-  // size_t MM = 0;
-  // for(size_t i=0; i<*nc; i=i+8) {
-  //   memset(freq, 0, sizeof(freq));
-  //   char* col = (char*) malloc(*nr * sizeof(*col));
-  //   fread(col, sizeof(uint8_t), *nr, fd);
-  //   int M=0;
-  //   for(size_t j=0; j<*nr; j++) {
-  //     uint8_t i = col[j];
-  //     ++freq[i];
-  //     M += (freq[i] == 1);
-  //     MM = MM < M ? M : MM;
-  //   }
-  // }
-
-  // printf("%zu\n", MM);
 }
 
 int fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
@@ -68,6 +51,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
   exit(IOENC_UNUSED_EXITCODE);
 }
 
+// WARN: above unused and untested for now
 #define FGETCOLIW_IMPL(W)                                                      \
   void fgetcoliw##W(void *fd, size_t i, size_t n, uint64_t *restrict c,        \
                     size_t nc) {                                               \
@@ -114,7 +98,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
                                                                                \
     if (bufn == BFGETCOLWR_BUF_SIZE) {                                         \
       uint64_t x;                                                              \
-      fseek(fd, i *W, SEEK_SET);                                               \
+      fseek(fd, i * W, SEEK_SET);                                              \
       for (size_t r = 0; r < n; r++) {                                         \
         fread(&rbuf, 1, 64 * BFGETCOLWR_BUF_SIZE, fd);                         \
         for (size_t s = 0; s < BFGETCOLWR_BUF_SIZE; s++) {                     \
@@ -225,26 +209,24 @@ FGETCOLIW_IMPL(64)
 
 void fgetcoliwg(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                 uint8_t w) {
-  
-  /// enc file is presented 1byte (8cols) of nrows at time, 
+
+  /// enc file is presented N byte(s) (N/8 cols) times nrows at time,
   /// w is the generic window size, must be a multiple of 8
   /// Current i serves for seeking, but currently we can assume no jumps
-  /// on the file. 
+  /// on the file.
 
-  size_t wmult = w/8; // how many time we have to grab nrows
-  assert( w%8 ==0);
-  
-  uint8_t *crow = malloc(n * sizeof(uint8_t));
-  
-  for (size_t t = 0; t < wmult; t++) { 
-    for (size_t j = 0; j < n-1; j++) {
-    fread (crow, sizeof(uint8_t), n, fd);
-      c[j] = (c[j] << 8)  | (crow[j]); 
+  size_t wmult = w / WENC; // how many time we have to grab nrows
+  assert(w % WENC == 0);
+  memset(c, 0, sizeof(*c) * n);
+
+  uw_t *crow = malloc(n * sizeof(*crow));
+  for (size_t r = 0; r < wmult; r++) {
+    fread(crow, sizeof(uw_t), n, fd);
+    for (size_t j = 0; j < n; j++) {
+      c[j] = (c[j] << (wmult * r)) | crow[j];
     }
-    fread (crow, sizeof(uint8_t), n, fd);
-    c[n-2] |= crow[n-2];
   }
-
+  free(crow);
 }
 
 int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
