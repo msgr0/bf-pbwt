@@ -1281,6 +1281,28 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
 }
 
 pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
+#if defined(BF2IOMODE_BCF)
+  ncol = 0;
+  htsFile *fp = hts_open(fpath, "r");
+  if (fp) {
+    // Read the header to advance the file pointer to the data
+    bcf_hdr_t *h = bcf_hdr_read(fp);
+    if (h) {
+      bcf1_t *line = bcf_init();
+
+      // bcf_read is faster than bcf_sr_next_line as it skips
+      // synchronization logic and deep unpacking
+      while (bcf_read(fp, h, line) == 0) {
+        ncol++;
+      }
+
+      bcf_destroy(line);
+      bcf_hdr_destroy(h);
+    }
+    hts_close(fp);
+  }
+#endif
+
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
