@@ -19,7 +19,7 @@ Known issues:
 - `bar`: not implemented
 - `bar[s|m]`: not relevant, should not be implemented
 - `prs`: implemented, needs checking
-- `bpr`: not implemented
+- `bpr`: not relevant, should not be implemented
 - `spr`: not implemented, this is very tricky
 
 ## ENC (64bit encoding) roadmap:

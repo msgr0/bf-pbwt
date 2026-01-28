@@ -1119,25 +1119,45 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
 
   pbwtad *p0 = pbwtad_new(nrow);
   pbwtad *p1 = pbwtad_new(nrow);
+  pbwtad *p0rev = pbwtad_new(nrow);
+  pbwtad *p1rev = pbwtad_new(nrow);
   sbfgetcolw64rn_mmap(fin, nrow, pw, ncol);
-  rrsort0(nrow, pw, p1->a, aux);
-  PDUMP(W - 1, p1);
-  SWAP(p0, p1);
+  rrsort0(nrow, pw, p0->a, aux);
+
+  // memcpy(p1rev->a, p0rev->a, nrow * sizeof *(p0rev->a));
+  // memcpy(p1rev->d, p0rev->d, nrow * sizeof *(p0rev->d));
+  reversec(p0, p0rev, nrow);
+  divc0(nrow, pw, p0);
+  PDUMPR(W - 1, p0);
 
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
-    memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
-    sbfgetcolw64rn_mmap(fin, nrow, pw, ncol);
-    rrsortx(nrow, pw, p1->a, aux);
-    PDUMP(W * (j + 1) - 1, p1);
+    sbfgetcolw64rn_mmap(fin, nrow, pw, ncol); // read next window
+    memcpy(p1->a, p0->a, nrow * sizeof *(p1->a)); // copy previous pbwt in P1 (a)
+    memcpy(p1->d, p0->d, nrow * sizeof *(p1->d)); // copy previous pbwt in P1 (d)
+
+
+    rrsortx(nrow, pw, p0->a, aux); // radix sorting p0->a with auxiliary array
+    memcpy(p1rev->a, p0rev->a, nrow * sizeof *(p0rev->a)); // copy previous pbwtReverse in P1rev (a)
+    memcpy(p1rev->d, p0rev->d, nrow * sizeof *(p0rev->d)); // copy previous pbwtReverse in P1rev (d)
+    reversec(p0, p0rev, nrow); // computing reversec after sorting the new array in P0 where P0[i] = P0rev[ P0->a[i] ]
+    divc(nrow, pw, p0, p1, p0rev, p1rev, W); // compute divergence from p1 to p0, using also reverse arrays
+    PDUMPR(W * (j + 1) - 1, p1);
   }
 
   uint8_t *c0 = NULL;
   j *= W;
   sfgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
   memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
-  rrsortx(nrow, pw, p1->a, aux);
-  PDUMP(ncol - 1, p1);
+  memcpy(p1->d, p0->d, nrow * sizeof *(p1->d));
+  rrsortx(nrow, pw, p0->a, aux);
+  memcpy(p1rev->a, p0rev->a, nrow * sizeof *(p1rev->a));
+  memcpy(p1rev->d, p0rev->d, nrow * sizeof *(p1rev->d));
+  reversec(p0, p0rev, nrow);
+  divc(nrow, pw, p0, p1, p0rev, p1rev, ncol - j);
+
+
+  PDUMPR(ncol - 1, p0);
 
   PBWTAD_FREE(p0);
   PBWTAD_FREE(p1);
@@ -1303,7 +1323,11 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
 pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
-  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
+  pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb0rev = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb1 = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb1rev = malloc(W * sizeof(pbwtad *));
+
 
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   pbwtad *p0 = pbwtad_new(nrow);
@@ -1312,14 +1336,23 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
     p0->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
-  pb[0] = cpbwt_0(nrow, c0, p0);
-  PDUMP(0, pb[0]);
-  PBWTAD_FREE(p0);
+  pb0[0] = cpbwt(nrow, c0, p0);
+  pb0rev[0] = p0;
+  // PDUMP(0, pb0[0]);
+  // PBWTAD_FREE(p0);
 
   for (int j = 1; j < W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    PDUMP(j, pb[j]);
+    pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
+    pb0rev[j] = pbwtad_new(nrow);
+    reversecprev(pb0[j], pb0[j - 1], pb0rev[j], nrow);
+  }
+
+  /* swapping div values with LCP for window computation */
+  for (int j = 0; j < W; j++) {
+    swapdiv(pb0[j], nrow, j);
+    swapdiv(pb0rev[j], nrow, j);
+    // PDUMP(j, pb0[j]);
   }
 
   uint64_t *pw0 = malloc(nrow * sizeof *pw0);
@@ -1327,44 +1360,82 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
   size_t *aux = malloc(nrow * sizeof *aux);
   bfgetcolw64rn(fin, nrow, pw0, ncol);
 
+  // pb0 is now filled with computed values,
+  // to allow reusing I need to fill pb1 with empty values
+  for (int j = 0; j < W; j++) {
+    pb1[j] = pbwtad_new(nrow);
+    pb1rev[j] = pbwtad_new(nrow);
+  }
+
   size_t j;
 
   for (j = 1; j * W <= ncol - W; j++) {
-    pbwtad *ps = pbwtad_new(nrow);
-    pb[W * (j + 1) - 1] = ps;
-    memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
     bfgetcolw64rn(fin, nrow, pw1, ncol);
+    pbwtad *ps = pb1[W - 1];
+    pbwtad *psrev = pb1rev[W - 1];
+    memcpy(ps->a, pb0[W - 1]->a, nrow * sizeof *(ps->a));
+    memcpy(ps->d, pb0[W - 1]->d, nrow * sizeof *(ps->d));
+    memcpy(psrev->a, pb0rev[W - 1]->a, nrow * sizeof *(ps->a));
+    memcpy(psrev->d, pb0rev[W - 1]->d, nrow * sizeof *(ps->d));
     rrsortx(nrow, pw1, ps->a, aux);
+    reversec(ps, psrev, nrow);
+    divc(nrow, pw1, ps, pb0[W - 1], psrev, pb0rev[W - 1], W);
 
-#pragma omp parallel for shared(pw1, pw0, pb, j)
+    // pbwtad *ps = pbwtad_new(nrow);
+    // pb[W * (j + 1) - 1] = ps;
+    // memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
+    // rrsortx(nrow, pw1, ps->a, aux);
+
+#pragma omp parallel for shared(pw1, pw0, pb0, pb1, j)
     for (size_t x = 1; x < W; x++) {
       uint64_t *w = malloc(nrow * sizeof *w);
-      size_t J = W * (j + 1) - 1;
+      size_t J = W - 1;
 
       wr64mrgsi(nrow, pw1, pw0, w, x);
-      pbwtad *ps = pbwtad_new(nrow);
-      pb[J - x] = ps;
-      memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
+      pbwtad *ps = pb1[J - x];
+      pbwtad *psrev = pb1rev[J - x];
+      // pbwtad *ps = pbwtad_new(nrow);
+      // pb[J - x] = ps;
+      memcpy(ps->a, pb0[J - x]->a, nrow * sizeof *(ps->a));
+      memcpy(ps->d, pb0[J - x]->d, nrow * sizeof *(ps->d));
+      memcpy(psrev->a, pb0[J - x]->a, nrow * sizeof *(psrev->a));
+      memcpy(psrev->d, pb0rev[J - x]->a, nrow * sizeof *(psrev->d));
+      // memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
       rrsortx_noaux(nrow, w, ps->a);
-
+      reversec(ps, psrev, nrow);
+      divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
       FREE(w);
     }
-
-    PDUMP_SEQ(W * j - 1, W * (j + 1) - 1, pb);
+    PDUMP_SEQ_OFFSET(0, W, pb1, W * j);
+    // PDUMP_SEQ(W * j - 1, W * (j + 1) - 1, pb1);
     SWAP(pw0, pw1);
+    SWAP(pb0, pb1);
+    SWAP(pb0rev, pb1rev);
+    // j++;
   }
+
+  pbwtad *pp0, *pp1;
+  pp0 = pb0[W - 1];
+  pp1 = pb0[W - 2];
 
   for (j = j * W; j < ncol; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    PDUMP(j, pb[j]);
+      cpbwtiLCP(nrow, j, c0, pp0, pp1);
+    PDUMP(j, pp1);
+    SWAP(pp0, pp1);
+    // pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
+    // PDUMP(j, pb[j]);
   }
-
+  for (int j = 0; j < W; j++) {
+    PBWTAD_FREE(pb0[j]);
+    PBWTAD_FREE(pb1[j]);
+  }
+  FREE(pb0);
+  FREE(pb1);
   FREE(pw0);
-  FREE(pw1);
   FREE(aux);
   FREE(c0);
-  return pb;
+  return NULL;
 }
 
 pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
