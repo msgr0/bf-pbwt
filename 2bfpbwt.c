@@ -1438,39 +1438,57 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
   return NULL;
 }
 
-pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
-  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
+pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {   //SPR
 
-  // first W must be computed linearly
+  // each thread (W threads, one for each
+  // position in a window) will keep its own pbwt structures.
+  // we need the current and previous pbwt and their reverse for each thread
+  // first window of pbwt must be computed linearly and saved in pb array
+  pbwtad **pb = malloc((W+1) * sizeof(pbwtad *));
+  for (int j = 0; j <= W; j++) {
+    pb[j] = pbwtad_new(nrow);
+  }
+
+
+  // first W must be computed linearly,
+  // then we can parellelize.
+  // we need to inherit each pbwt computed here to each thread
+
   FILE *fin = fopen(fpath, "r");
   if (!fin) {
     perror("[spr]");
     exit(32);
   }
+  // first column
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  pbwtad *p0 = pbwtad_new(nrow);
+  // allocate pbwt array (initialize)
   for (int j = 0; j < nrow; j++) {
-    p0->a[j] = j;
-    p0->d[j] = 0;
+    pb[0]->a[j] = j;
+    pb[0]->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
-  pb[0] = cpbwt_0(nrow, c0, p0);
-  PDUMP(0, pb[0]);
-  PBWTAD_FREE(p0);
-  /*printf("[man] c:0 (<1..N)\n");*/
+  cpbwti(nrow, c0, pb[0], pb[1]);
+  PDUMP(0, pb[1]);
 
-  for (size_t j = 1; j < W; j++) {
+  #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
+    for (size_t j = 1; j < W;) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    /*printf("[lin] c:%zu (<%zu)\n", j, j - 1);*/
-  }
+  #elif defined(BF2IOMODE_BCF)
+    size_t j = 1;
+    while (fgetcoli(fin, j, nrow, c0, 1)) {
+  #else
+  #error UNDEFINED BEHAVIOUR
+  #endif
+      cpbwti(nrow, c0, pb[j], pb[j+1]);
+      PDUMP(j, pb[j+1]);
+      j++;
+    }
+  
 
-// This works differently from previous versions of windows.
-// here I am computing (j+w) using value in j
+  //now each thread can inherit p0 and p0rev as starting pbwt structures
 #pragma omp parallel
   {
+
     FILE *fin = fopen(fpath, "r");
     if (!fin) {
       perror("[spr]");
@@ -1487,22 +1505,31 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {
 
     for (int offset = 0; offset < count; offset++) {
       int lane = start + offset;
+      pbwtad *pt0 = pb[start];
+      pbwtad *pt1 = pbwtad_new(nrow);
+      pbwtad *pt0rev = pbwtad_new(nrow);
+      pbwtad *pt1rev = pbwtad_new(nrow);
 
       for (size_t j = lane; j + W < ncol; j += W) {
-
+        size_t *aux = malloc(nrow * sizeof *aux);
         uint64_t *pw = malloc(nrow * sizeof *pw);
-        pbwtad *ps = pbwtad_new(nrow);
-        pb[j + W] = ps;
-        memcpy(ps->a, pb[j]->a, nrow * sizeof *(ps->a));
-
         fgetcolwgri(fin, j + 1, nrow, pw, ncol, W);
+
+        memcpy(pt1->a, pt0->a, nrow * sizeof *(pt0->a));
+        memcpy(pt1->d, pt0->d, nrow * sizeof *(pt0->d));
+        memcpy(pt1rev->a, pt0rev->a, nrow * sizeof *(pt0rev->a));
+        memcpy(pt1rev->d, pt0rev->d, nrow * sizeof *(pt0rev->d));
+
+        rrsortx(nrow, pw, pt0->a, aux);
+        reversec(pt0, pt0rev, nrow);
+        divc(nrow, pw, pt0, pt1, pt0rev, pt1rev, W);
+        
         // maybe change to aux for each thread
-        rrsortx_noaux(nrow, pw, ps->a);
 
 #ifdef DBDUMP
 #pragma omp critical
         {
-          PDUMP(j + W, ps);
+          PDUMPR(j + W, pt0);
         }
 #endif
 
