@@ -1133,15 +1133,20 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   size_t j;
   for (j = 1; j * W <= ncol - W; j++) {
     sbfgetcolw64rn_mmap(fin, nrow, pw, ncol); // read next window
-    memcpy(p1->a, p0->a, nrow * sizeof *(p1->a)); // copy previous pbwt in P1 (a)
-    memcpy(p1->d, p0->d, nrow * sizeof *(p1->d)); // copy previous pbwt in P1 (d)
-
+    memcpy(p1->a, p0->a,
+           nrow * sizeof *(p1->a)); // copy previous pbwt in P1 (a)
+    memcpy(p1->d, p0->d,
+           nrow * sizeof *(p1->d)); // copy previous pbwt in P1 (d)
 
     rrsortx(nrow, pw, p0->a, aux); // radix sorting p0->a with auxiliary array
-    memcpy(p1rev->a, p0rev->a, nrow * sizeof *(p0rev->a)); // copy previous pbwtReverse in P1rev (a)
-    memcpy(p1rev->d, p0rev->d, nrow * sizeof *(p0rev->d)); // copy previous pbwtReverse in P1rev (d)
-    reversec(p0, p0rev, nrow); // computing reversec after sorting the new array in P0 where P0[i] = P0rev[ P0->a[i] ]
-    divc(nrow, pw, p0, p1, p0rev, p1rev, W); // compute divergence from p1 to p0, using also reverse arrays
+    memcpy(p1rev->a, p0rev->a,
+           nrow * sizeof *(p0rev->a)); // copy previous pbwtReverse in P1rev (a)
+    memcpy(p1rev->d, p0rev->d,
+           nrow * sizeof *(p0rev->d)); // copy previous pbwtReverse in P1rev (d)
+    reversec(p0, p0rev, nrow); // computing reversec after sorting the new array
+                               // in P0 where P0[i] = P0rev[ P0->a[i] ]
+    divc(nrow, pw, p0, p1, p0rev, p1rev,
+         W); // compute divergence from p1 to p0, using also reverse arrays
     PDUMPR(W * (j + 1) - 1, p1);
   }
 
@@ -1155,7 +1160,6 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   memcpy(p1rev->d, p0rev->d, nrow * sizeof *(p1rev->d));
   reversec(p0, p0rev, nrow);
   divc(nrow, pw, p0, p1, p0rev, p1rev, ncol - j);
-
 
   PDUMPR(ncol - 1, p0);
 
@@ -1328,7 +1332,6 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
   pbwtad **pb1 = malloc(W * sizeof(pbwtad *));
   pbwtad **pb1rev = malloc(W * sizeof(pbwtad *));
 
-
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
@@ -1420,7 +1423,7 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
 
   for (j = j * W; j < ncol; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
-      cpbwtiLCP(nrow, j, c0, pp0, pp1);
+    cpbwtiLCP(nrow, j, c0, pp0, pp1);
     PDUMP(j, pp1);
     SWAP(pp0, pp1);
     // pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
@@ -1438,27 +1441,56 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
   return NULL;
 }
 
-pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {   //SPR
+pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
+  // #if defined(BF2IOMODE_BCF)
+  //   ncol = 0;
+  //   htsFile *fp = hts_open(fpath, "r");
+  //   if (fp) {
+  //     // Read the header to advance the file pointer to the data
+  //     bcf_hdr_t *h = bcf_hdr_read(fp);
+  //     if (h) {
+  //       bcf1_t *line = bcf_init();
+  //
+  //       // bcf_read is faster than bcf_sr_next_line as it skips
+  //       // synchronization logic and deep unpacking
+  //       while (bcf_read(fp, h, line) == 0) {
+  //         ncol++;
+  //       }
+  //
+  //       bcf_destroy(line);
+  //       bcf_hdr_destroy(h);
+  //     }
+  //     hts_close(fp);
+  //   }
+  // #endif
 
   // each thread (W threads, one for each
   // position in a window) will keep its own pbwt structures.
   // we need the current and previous pbwt and their reverse for each thread
   // first window of pbwt must be computed linearly and saved in pb array
-  pbwtad **pb = malloc((W+1) * sizeof(pbwtad *));
+  pbwtad **pb = malloc((W + 1) * sizeof(pbwtad *));
   for (int j = 0; j <= W; j++) {
     pb[j] = pbwtad_new(nrow);
   }
-
 
   // first W must be computed linearly,
   // then we can parellelize.
   // we need to inherit each pbwt computed here to each thread
 
+#ifdef BF2IOMODE_BCF
+  bcf_srs_t *_sr = bcf_sr_init();
+  bcf_sr_add_reader(_sr, fpath);
+  void *fin = _sr;
+#elif defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
   FILE *fin = fopen(fpath, "r");
   if (!fin) {
     perror("[spr]");
     exit(32);
   }
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
+
   // first column
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   // allocate pbwt array (initialize)
@@ -1471,31 +1503,39 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {   //SPR
   swapdiv(pb[0], nrow, 0);
   PDUMP(0, pb[1]);
 
-  #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
-    for (size_t j = 1; j < W;) {
+  for (size_t j = 1; j < W;) {
     fgetcoli(fin, j, nrow, c0, ncol);
-  #elif defined(BF2IOMODE_BCF)
-    size_t j = 1;
-    while (fgetcoli(fin, j, nrow, c0, 1)) {
-  #else
-  #error UNDEFINED BEHAVIOUR
-  #endif
-      cpbwti(nrow, c0, pb[j], pb[j+1]);
-      swapdiv(pb[j], nrow, j);
-      PDUMP(j, pb[j+1]);
-      j++;
-    }
-  
+    cpbwti(nrow, c0, pb[j], pb[j + 1]);
+    PDUMP(j, pb[j + 1]);
+    j++;
+  }
 
-  //now each thread can inherit p0 and p0rev as starting pbwt structures
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
+  fclose(fin);
+#elif defined(BF2IOMODE_BCF)
+  bcf_sr_destroy(_sr);
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
+
+  // now each thread can inherit p0 and p0rev as starting pbwt structures
 #pragma omp parallel
   {
 
+#ifdef BF2IOMODE_BCF
+    bcf_srs_t *_sr = bcf_sr_init();
+    bcf_sr_add_reader(_sr, fpath);
+    void *fin = _sr;
+#elif defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
     FILE *fin = fopen(fpath, "r");
     if (!fin) {
       perror("[spr]");
-      exit(33);
+      exit(32);
     }
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
+
     int tid = omp_get_thread_num();
     int nthreads = omp_get_num_threads();
 
@@ -1533,8 +1573,6 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {   //SPR
         reversec(pt0, pt0rev, nrow);
         divc(nrow, pw, pt0, pt1, pt0rev, pt1rev, W);
 
-        
-        
         // maybe change to aux for each thread
 
 #ifdef DBDUMP
