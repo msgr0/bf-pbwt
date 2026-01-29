@@ -23,7 +23,11 @@ endif
 .PHONY: all
 all: ${ALL}
 
-debug: CFLAGS=-O0 -g
+debug: CFLAGS=-fstrict-aliasing -Wstrict-aliasing -fsanitize=address -O0 -g
+debug: ${ALL}
+
+leaks: CFLAGS=-fstrict-aliasing -Wstrict-aliasing -O0 -g
+leaks: ${ALL}
 
 %.o: %.c %.h
 	${CC} -c ${CFLAGS} ${CCINCL} $< -o $@
