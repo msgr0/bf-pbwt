@@ -264,7 +264,8 @@ int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
 
 void bfgetcolwgrn(void *fd, size_t n, uint64_t *restrict c, size_t nc,
                   uint8_t w) {
-  fprintf(stderr, "\e[0;33m[%s] Not Implemented Yet.\e[0m\n", __func__);
+  fputs("\e[0;33mMode not used for this type of file. Exiting.\e[0m\n", stderr);
+  exit(IOBCF_UNUSED_EXITCODE);
 }
 void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
                    uint8_t w) {
@@ -273,8 +274,55 @@ void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
 }
 
 int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
-                 uint8_t w) {
-  fprintf(stderr, "\e[0;33m[%s] Not Implemented Yet.\e[0m\n", __func__);
+                uint8_t w) {
+
+  // NOTE: NC not used here, can be used as thread-safe _li
+
+  bcf_srs_t *sr = fd;
+  bcf_hdr_t *hdr = NULL;
+  if (!hdr)
+    hdr = sr->readers[0].header;
+  if (nc >= i) {
+    // bcf_sr_seek does not work, maybe it does not work only without index.
+    // either way we cannot use it reliably
+    char *fname = strdup(sr->readers[0].fname);
+    bcf_sr_remove_reader(sr, 0);
+    if (!bcf_sr_add_reader(sr, fname)) {
+      fprintf(stderr, "Failed to re-open: %s\n", fname);
+      exit(24);
+    }
+    free(fname);
+    hdr = sr->readers[0].header;
+    nc = 0;
+  }
+
+  for (; nc < i; nc++) {
+    if (!bcf_sr_next_line(sr)) {
+      fprintf(stderr, "frror seeking to BCF to i=%zu, nc = %zu\n", i, nc);
+      exit(22);
+    }
+  }
+  memset(c, 0, n * sizeof *c);
+  for (size_t wix = 0; wix < w; wix++) {
+    if (!bcf_sr_next_line(sr))
+      return i + wix;
+    bcf1_t *line = bcf_sr_get_line(sr, 0);
+    int32_t *gt_arr = NULL, ngt_arr = 0;
+    int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
+
+    for (size_t i = 0; i < n / 2; i++) {
+      int32_t *ptr = gt_arr + i * 2;
+      // hap 1
+      IOBCF_WELLFORMED_CHECK(ptr[0]);
+      c[2 * i] |= ((uint64_t)bcf_gt_allele(ptr[0]) << wix);
+
+      // hap 2
+      IOBCF_WELLFORMED_CHECK(ptr[1]);
+      c[2 * i + 1] |= ((uint64_t)bcf_gt_allele(ptr[1]) << wix);
+    }
+    free(gt_arr);
+  }
+  return i + w - 1;
 }
 
 void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,

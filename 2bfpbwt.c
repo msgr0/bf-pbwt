@@ -1442,27 +1442,27 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
 }
 
 pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
-  // #if defined(BF2IOMODE_BCF)
-  //   ncol = 0;
-  //   htsFile *fp = hts_open(fpath, "r");
-  //   if (fp) {
-  //     // Read the header to advance the file pointer to the data
-  //     bcf_hdr_t *h = bcf_hdr_read(fp);
-  //     if (h) {
-  //       bcf1_t *line = bcf_init();
-  //
-  //       // bcf_read is faster than bcf_sr_next_line as it skips
-  //       // synchronization logic and deep unpacking
-  //       while (bcf_read(fp, h, line) == 0) {
-  //         ncol++;
-  //       }
-  //
-  //       bcf_destroy(line);
-  //       bcf_hdr_destroy(h);
-  //     }
-  //     hts_close(fp);
-  //   }
-  // #endif
+  #if defined(BF2IOMODE_BCF)
+    ncol = 0;
+    htsFile *fp = hts_open(fpath, "r");
+    if (fp) {
+      // Read the header to advance the file pointer to the data
+      bcf_hdr_t *h = bcf_hdr_read(fp);
+      if (h) {
+        bcf1_t *line = bcf_init();
+
+        // bcf_read is faster than bcf_sr_next_line as it skips
+        // synchronization logic and deep unpacking
+        while (bcf_read(fp, h, line) == 0) {
+          ncol++;
+        }
+
+        bcf_destroy(line);
+        bcf_hdr_destroy(h);
+      }
+      hts_close(fp);
+    }
+  #endif
 
   // each thread (W threads, one for each
   // position in a window) will keep its own pbwt structures.
@@ -1526,6 +1526,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     bcf_srs_t *_sr = bcf_sr_init();
     bcf_sr_add_reader(_sr, fpath);
     void *fin = _sr;
+    size_t lastrowread = 0;
 #elif defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
     FILE *fin = fopen(fpath, "r");
     if (!fin) {
@@ -1562,12 +1563,16 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
       for (size_t j = lane; j + W < ncol; j += W) {
         uint64_t *pw = malloc(nrow * sizeof *pw);
-        fgetcolwgri(fin, j+1, nrow, pw, ncol, W);
+
+#ifdef BF2IOMODE_BCF
+        lastrowread = fgetcolwgri(fin, j + 1, nrow, pw, lastrowread, W);
+#else
+        fgetcolwgri(fin, j + 1, nrow, pw, ncol, W);
+#endif
         memcpy(pt1->a, pt0->a, nrow * sizeof *(pt0->a));
         memcpy(pt1->d, pt0->d, nrow * sizeof *(pt0->d));
         memcpy(pt1rev->a, pt0rev->a, nrow * sizeof *(pt0rev->a));
         memcpy(pt1rev->d, pt0rev->d, nrow * sizeof *(pt0rev->d));
-
 
         rrsortx_noaux(nrow, pw, pt0->a);
         reversec(pt0, pt0rev, nrow);
