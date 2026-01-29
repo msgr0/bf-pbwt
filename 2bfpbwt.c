@@ -1468,6 +1468,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {   //SPR
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
   cpbwti(nrow, c0, pb[0], pb[1]);
+  swapdiv(pb[0], nrow, 0);
   PDUMP(0, pb[1]);
 
   #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
@@ -1480,6 +1481,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {   //SPR
   #error UNDEFINED BEHAVIOUR
   #endif
       cpbwti(nrow, c0, pb[j], pb[j+1]);
+      swapdiv(pb[j], nrow, j);
       PDUMP(j, pb[j+1]);
       j++;
     }
@@ -1505,24 +1507,33 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) {   //SPR
 
     for (int offset = 0; offset < count; offset++) {
       int lane = start + offset;
-      pbwtad *pt0 = pb[start];
-      pbwtad *pt1 = pbwtad_new(nrow);
+      // fprintf(stderr, "Thread %d processing lane %d\n", tid, lane);
+      // fprintf(stderr, "Thread %d processing start %d\n", tid, start);
+      // fprintf(stderr, "Thread %d processing count %d\n", tid, count);
+
+      pbwtad *pt0 = pbwtad_new(nrow);
+      memcpy(pt0->a, pb[lane]->a, nrow * sizeof *(pb[lane]->a));
+      memcpy(pt0->d, pb[lane]->d, nrow * sizeof *(pb[lane]->d));
       pbwtad *pt0rev = pbwtad_new(nrow);
+      reversec(pt0, pt0rev, nrow);
+
+      pbwtad *pt1 = pbwtad_new(nrow);
       pbwtad *pt1rev = pbwtad_new(nrow);
 
       for (size_t j = lane; j + W < ncol; j += W) {
-        size_t *aux = malloc(nrow * sizeof *aux);
         uint64_t *pw = malloc(nrow * sizeof *pw);
-        fgetcolwgri(fin, j + 1, nrow, pw, ncol, W);
-
+        fgetcolwgri(fin, j+1, nrow, pw, ncol, W);
         memcpy(pt1->a, pt0->a, nrow * sizeof *(pt0->a));
         memcpy(pt1->d, pt0->d, nrow * sizeof *(pt0->d));
         memcpy(pt1rev->a, pt0rev->a, nrow * sizeof *(pt0rev->a));
         memcpy(pt1rev->d, pt0rev->d, nrow * sizeof *(pt0rev->d));
 
-        rrsortx(nrow, pw, pt0->a, aux);
+
+        rrsortx_noaux(nrow, pw, pt0->a);
         reversec(pt0, pt0rev, nrow);
         divc(nrow, pw, pt0, pt1, pt0rev, pt1rev, W);
+
+        
         
         // maybe change to aux for each thread
 
