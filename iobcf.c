@@ -272,7 +272,7 @@ void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
   exit(IOBCF_UNUSED_EXITCODE);
 }
 
-void fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                  uint8_t w) {
   fprintf(stderr, "\e[0;33m[%s] Not Implemented Yet.\e[0m\n", __func__);
 }

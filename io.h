@@ -106,7 +106,7 @@ void sbfgetcolwgrn(int fd, size_t n, uint64_t *c, size_t nc, uint8_t w);
 //
 // This version does not use window size to move in the file.
 // It starts reading from column `i` as-is without window-offset computation
-void fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
+int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
                   uint8_t w);
 
 // Syscall File GET COLumn Window General-length starting at I

@@ -461,7 +461,7 @@ void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
   i++;
 }
 
-void fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                  uint8_t w) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
@@ -478,6 +478,7 @@ void fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
     /*printf(")=%llu\n", c[r]);*/
     fseek(fd, nc - w + 1, SEEK_CUR);
   }
+  return w;
 }
 
 void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
