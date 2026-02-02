@@ -823,7 +823,7 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
   size_t j = 1;
-  while (fgetcoli(fin, j, nrow, c0, 1)) {
+  while (fgetcoli(fin, j, nrow, c0, 1)) { //ERROR CHECK: should be j < W ??
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
@@ -1526,7 +1526,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
   size_t j = 1;
-  while (fgetcoli(fin, j, nrow, c0, 1)) {
+  while (j < W && fgetcoli(fin, j, nrow, c0, 1)) {
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
