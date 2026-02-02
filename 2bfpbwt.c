@@ -1464,18 +1464,17 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     }
   #endif
 
-  // each thread (W threads, one for each
-  // position in a window) will keep its own pbwt structures.
-  // we need the current and previous pbwt and their reverse for each thread
-  // first window of pbwt must be computed linearly and saved in pb array
   pbwtad **pb = malloc((W + 1) * sizeof(pbwtad *));
-  for (int j = 0; j <= W; j++) {
+  pbwtad *pbprev = pbwtad_new(nrow);
+
+
+  for (int j = 0; j < W + 1; j++) {
     pb[j] = pbwtad_new(nrow);
   }
-
-  // first W must be computed linearly,
-  // then we can parellelize.
-  // we need to inherit each pbwt computed here to each thread
+  for (size_t i = 0; i < nrow; i++) {
+  	pb[0]->a[i] = i;
+	  pb[0]->d[i] = 0;
+  }
 
 #ifdef BF2IOMODE_BCF
   bcf_srs_t *_sr = bcf_sr_init();
@@ -1493,21 +1492,22 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
   // first column
   uint8_t *c0 = malloc(nrow * sizeof *c0);
-  // allocate pbwt array (initialize)
-  for (int j = 0; j < nrow; j++) {
-    pb[0]->a[j] = j;
-    pb[0]->d[j] = 0;
-  }
   fgetcoli(fin, 0, nrow, c0, ncol);
-  cpbwti(nrow, c0, pb[0], pb[1]);
-  swapdiv(pb[0], nrow, 0);
-  PDUMP(0, pb[1]);
+  memcpy(pbprev->a, pb[0]->a, nrow * sizeof(*pb[0]->a));
+  memcpy(pbprev->d, pb[0]->d, nrow * sizeof(*pb[0]->d));
+
+  cpbwtiLCP(nrow, 1, c0, pbprev, pb[1]);
+
+  PDUMPR(0, pb[1]);
 
   for (size_t j = 1; j < W;) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    cpbwti(nrow, c0, pb[j], pb[j + 1]);
-    PDUMP(j, pb[j + 1]);
-    j++;
+    memcpy(pbprev->a, pb[j]->a, nrow * sizeof(*pb[j]->a));
+    memcpy(pbprev->d, pb[j]->d, nrow * sizeof(*pb[j]->d));
+
+    cpbwtiLCP(nrow, j, c0, pbprev, pb[j + 1]);
+    PDUMPR(j, pb[j + 1]);
+	j++;
   }
 
 #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
@@ -1529,71 +1529,85 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     size_t lastrowread = 0;
 #elif defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
     FILE *fin = fopen(fpath, "r");
+
     if (!fin) {
       perror("[spr]");
       exit(32);
     }
+
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
 
-    int tid = omp_get_thread_num();
-    int nthreads = omp_get_num_threads();
+    size_t tid = omp_get_thread_num();
+    size_t nthreads = omp_get_num_threads();
 
-    int base = W / nthreads;
-    int rem = W % nthreads;
+    size_t base = W / nthreads;
+    size_t rem = W % nthreads;
 
-    int start = tid * base + (tid < rem ? tid : rem);
-    int count = base + (tid < rem ? 1 : 0);
+    size_t start = tid * base + (tid < rem ? tid : rem);
+    size_t count = base + (tid < rem ? 1 : 0);
+    pbwtad *pt0 = pbwtad_new(nrow);
+    pbwtad *pt0rev = pbwtad_new(nrow);
+    pbwtad *pt1 = pbwtad_new(nrow);
+    pbwtad *pt1rev = pbwtad_new(nrow);
+      size_t *aux = malloc(nrow * sizeof *aux);
+      uint64_t *pw = malloc(nrow * sizeof *pw);
 
-    for (int offset = 0; offset < count; offset++) {
-      int lane = start + offset;
-      // fprintf(stderr, "Thread %d processing lane %d\n", tid, lane);
-      // fprintf(stderr, "Thread %d processing start %d\n", tid, start);
-      // fprintf(stderr, "Thread %d processing count %d\n", tid, count);
-
-      pbwtad *pt0 = pbwtad_new(nrow);
+    for (size_t offset = 0; offset < count; offset++) {
+      size_t lane = start + offset;
       memcpy(pt0->a, pb[lane]->a, nrow * sizeof *(pb[lane]->a));
       memcpy(pt0->d, pb[lane]->d, nrow * sizeof *(pb[lane]->d));
-      pbwtad *pt0rev = pbwtad_new(nrow);
+
       reversec(pt0, pt0rev, nrow);
 
-      pbwtad *pt1 = pbwtad_new(nrow);
-      pbwtad *pt1rev = pbwtad_new(nrow);
 
       for (size_t j = lane; j + W < ncol; j += W) {
-        uint64_t *pw = malloc(nrow * sizeof *pw);
 
 #ifdef BF2IOMODE_BCF
         lastrowread = fgetcolwgri(fin, j + 1, nrow, pw, lastrowread, W);
 #else
         fgetcolwgri(fin, j + 1, nrow, pw, ncol, W);
 #endif
+
         memcpy(pt1->a, pt0->a, nrow * sizeof *(pt0->a));
         memcpy(pt1->d, pt0->d, nrow * sizeof *(pt0->d));
         memcpy(pt1rev->a, pt0rev->a, nrow * sizeof *(pt0rev->a));
         memcpy(pt1rev->d, pt0rev->d, nrow * sizeof *(pt0rev->d));
 
-        rrsortx_noaux(nrow, pw, pt0->a);
+
+        rrsortx(nrow, pw, pt0->a, aux);
         reversec(pt0, pt0rev, nrow);
         divc(nrow, pw, pt0, pt1, pt0rev, pt1rev, W);
-
-        // maybe change to aux for each thread
 
 #ifdef DBDUMP
 #pragma omp critical
         {
-          PDUMPR(j + W, pt0);
+          PDUMPR(j + W - 1, pt0);
         }
 #endif
-
-        FREE(pw);
       }
     }
-  }
 
+    PBWTAD_FREE(pt0);
+    PBWTAD_FREE(pt1);
+    PBWTAD_FREE(pt0rev);
+    PBWTAD_FREE(pt1rev);
+    FREE(pt0);
+    FREE(pt1);
+    FREE(pt0rev);
+    FREE(pt1rev);
+    FREE(aux);
+    FREE(pw);
+      }
   FREE(c0);
   return pb;
+  // for (int j = 0; j < W + 1; j++) {
+  //   PBWTAD_FREE(pb[j]);
+  //   FREE(pb[j]);
+  // }
+  // FREE(pb);
+
 }
 
 pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
