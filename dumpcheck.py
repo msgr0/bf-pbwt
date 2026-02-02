@@ -1,7 +1,7 @@
 import sys
 
 CHECKA = True
-CHECKD = False
+CHECKD = True
 
 
 def file_ix(f, fname=""):

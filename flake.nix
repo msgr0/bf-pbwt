@@ -18,19 +18,19 @@
       {
         devShells.default = pkgs.mkShell.override { inherit stdenv; } {
           buildInputs = with pkgs; [
+            gcc
+            
             # Bioinformatics
             htslib
-            
-            # Core Build Tools
+           
             pkg-config
-            gnumake
-            gdb         # Debugger
             
             # Common HTSlib dependencies (often needed for linking)
             zlib
             bzip2
             xz
             curl
+            bear
           ];
 
           shellHook = ''

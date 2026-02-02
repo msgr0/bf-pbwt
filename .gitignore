@@ -6,10 +6,16 @@
 
 # executables
 bf-pbwt
-2bfpbwt
+2bfpbwt-*
 2bfpbwt-bm
 pgen
 gen
+
+
+data/
+compile_commands.json
+flake.lock
+
 
 work/
 nextflow
