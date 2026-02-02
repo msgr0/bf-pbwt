@@ -1,3 +1,4 @@
+/* vim: set tabstop=2 shiftwidth=2 expandtab: */ 
 #include "io.h"
 #include "tracing.h"
 #include <assert.h>
@@ -13,10 +14,39 @@
 #endif
 
 #define W 64
+uint8_t DO_DUMP_LAST = 0;
 
 #define DBDUMP
 uint8_t DO_DUMP = 0;
 #ifdef DBDUMP
+#define LASTDUMP(p)                                                            \
+  do {                                                                         \
+    if (DO_DUMP_LAST) {                                                        \
+      printf("last_pbwt: ");                                                   \
+      size_t pdump_j__;                                                        \
+      for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
+        printf("%zu ", (p)->a[pdump_j__]);                                     \
+      printf("%zu", (p)->a[pdump_j__]);                                        \
+      fputc('|', stdout);                                                      \
+      for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
+        printf("%zu ", (p)->d[pdump_j__]);                                     \
+      printf("%zu", (p)->d[pdump_j__]);                                        \
+      fputc(0xA, stdout);                                                      \
+    }                                                                          \
+  } while (0)
+
+#define CDUMP8(i, c)                                                           \
+  do {                                                                         \
+    if (DO_DUMP) {                                                             \
+      printf("%zu:", (size_t)(i));                                             \
+      size_t cdump_j__;                                                        \
+      for (cdump_j__ = 0; cdump_j__ < nrow - 1; cdump_j__++)                   \
+        printf("%u ", c[cdump_j__]);                                           \
+      printf("%u", c[cdump_j__]);                                              \
+      fputc(0xA, stdout);                                                      \
+    }                                                                          \
+  } while (0)
+
 #define CDUMP(i, c)                                                            \
   do {                                                                         \
     if (DO_DUMP) {                                                             \
@@ -104,8 +134,8 @@ uint8_t DO_DUMP = 0;
         printf("%zu", (p)[pdump_ix__]->a[pdump_j__]);                          \
         fputc('|', stdout);                                                    \
         for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                 \
-          printf("%zu ", 1 + e - (p)[pdump_ix__]->d[pdump_j__]);               \
-        printf("%zu", 1 + e - (p)[pdump_ix__]->d[pdump_j__]);                  \
+          printf("%zu ",offset + pdump_ix__ +1 - (p)[pdump_ix__]->d[pdump_j__]);               \
+        printf("%zu", offset + pdump_ix__ +1 - (p)[pdump_ix__]->d[pdump_j__]);                  \
         fputc(0xA, stdout);                                                    \
       }                                                                        \
     }                                                                          \
@@ -327,7 +357,9 @@ size_t recover_div(size_t n, size_t w, size_t i, size_t i0, uint64_t *c,
                    pbwtad *p, pbwtad *ppr, pbwtad *prev, pbwtad *pprrev) {
 
   size_t d;
-  size_t min = ppr->d[pprrev->a[i]];
+  size_t j = pprrev->a[i];
+  size_t min = ppr->d[j];
+
   for (size_t j = (pprrev->a[i0]) + 1; j < (pprrev->a[i]); j++) {
     if (ppr->d[j] < min) {
       min = ppr->d[j];
@@ -663,7 +695,7 @@ static int cpbwtiLCP(size_t n, size_t k, uint8_t *restrict c,
   memcpy(pc->a + r, o, q * sizeof(size_t));
   memcpy(pc->d + r, h, q * sizeof(size_t));
 
-  PDUMP(k, pc);
+  // PDUMP(k, pc);
   swapdiv(pc, n, k);
   return 1;
 }
@@ -819,7 +851,8 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
     SWAP(p0, p1);
     j++;
   }
-
+  if (DO_DUMP_LAST)
+    LASTDUMP(p1);
   PBWTAD_FREE(p0);
   PBWTAD_FREE(p1);
   FREE(c0);
@@ -905,7 +938,7 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
   return NULL;
 }
 
-pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
+pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { //ARS
   // Compute the bit-packed windows
   uint64_t *w64 =
       malloc(nrow * sizeof *w64); // window data collected by fgetcoliw64r
@@ -1048,7 +1081,7 @@ pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   return NULL;
 }
 
-pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
+pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) { //BARS
   // Compute the bit-packed windows
   uint64_t *w64 = malloc(nrow * sizeof *w64);
   // uint64_t *xor = malloc(nrow * sizeof *xor);
@@ -1059,6 +1092,7 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   pbwtad *pbwtRev = pbwtad_new(nrow);
   pbwtad *pbwtPrRev = pbwtad_new(nrow);
 
+
   sbfgetcolw64rn(fin, nrow, w64, ncol);
   rrsort0(nrow, w64, pbwt->a, aux);
   memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
@@ -1066,6 +1100,10 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   reversec(pbwt, pbwtRev, nrow);
   divc0(nrow, w64, pbwt);
   PDUMPR(W - 1, pbwt);
+  PDUMPR(W - 1, pbwtRev);
+  
+  PDUMPR(W - 1, pbwtPr);
+  PDUMPR(W - 1, pbwtPrRev);
 
   size_t j, k = 1;
   for (j = 1; j * W <= ncol - W; j++) {
@@ -1112,7 +1150,7 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
   return NULL;
 }
 
-pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
+pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) { //BARM
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
   size_t *aux = malloc(nrow * sizeof *aux);
@@ -1149,7 +1187,7 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
          W); // compute divergence from p1 to p0, using also reverse arrays
     PDUMPR(W * (j + 1) - 1, p1);
   }
-
+  // same stuff for last window of size < W
   uint8_t *c0 = NULL;
   j *= W;
   sfgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
@@ -1165,6 +1203,8 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
 
   PBWTAD_FREE(p0);
   PBWTAD_FREE(p1);
+  PBWTAD_FREE(p0rev);
+  PBWTAD_FREE(p1rev);
   FREE(c0);
   FREE(pw);
   FREE(aux);
@@ -1174,7 +1214,7 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) {
 /* parallel mixed-windows pbwt
  *
  */
-pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
+pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {  //PRS
   // NOTE: here it is necessary to keep in memory the entire windows
   pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
   pbwtad **pb0rev = malloc(W * sizeof(pbwtad *));
@@ -1195,15 +1235,15 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
 
   fgetcoli(fin, 0, nrow, c0, ncol);
   pb0[0] = cpbwt(nrow, c0, p0);
-  printf("first col guard\n");
+  // printf("first col guard\n");
   pb0rev[0] = p0;
-  // PDUMP(0, pb0[0]);
+  PDUMP(0, pb0[0]);
   for (int j = 1; j < W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
     pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
     pb0rev[j] = pbwtad_new(nrow);
     reversecprev(pb0[j], pb0[j - 1], pb0rev[j], nrow);
-    // PDUMP(j, pb0[j]);
+    PDUMP(j, pb0[j]);
   }
 
 #ifdef BF2IOMODE_BCF
@@ -1214,7 +1254,7 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   for (int j = 0; j < W; j++) {
     swapdiv(pb0[j], nrow, j);
     swapdiv(pb0rev[j], nrow, j);
-    PDUMP(j, pb0[j]);
+    // PDUMPR(j, pb0[j]);
   }
   uint64_t *pw0 = malloc(nrow * sizeof *pw0);
   uint64_t *pw1 = malloc(nrow * sizeof *pw1);
@@ -1270,7 +1310,7 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
       divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
       FREE(w);
     }
-    PDUMP_SEQ_OFFSET(0, W, pb1, W * j); // FIXME: print here should be rewritten
+    PDUMP_SEQ_OFFSETR(0, W, pb1, W * j); // FIXME: print here should be rewritten
                                         // for LCP display as divergence
     SWAP(pw0, pw1);
     SWAP(pb0, pb1);
@@ -1288,7 +1328,7 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   size_t wix = 0;
 #endif
   for (j = j * W; j < ncol; j++) {
-    printf("entering last w at j %zu\n", j);
+    // printf("entering last w at j %zu\n", j);
 #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
@@ -1306,7 +1346,7 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
     // if ((j/W) % W == 3) swapdiv(pp1, nrow, j);
     // if ((j/W) % W == 2) swapdiv(pp0, nrow, j);
     cpbwtiLCP(nrow, j, c0, pp0, pp1);
-    PDUMP(j, pp1);
+    PDUMPR(j, pp1);
     SWAP(pp0, pp1);
   }
 
@@ -1324,7 +1364,7 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {
   FREE(c0);
   return NULL;
 }
-pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
+pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {  //BPR
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
@@ -1338,10 +1378,11 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
     p0->a[j] = j;
     p0->d[j] = 0;
   }
+
   fgetcoli(fin, 0, nrow, c0, ncol);
   pb0[0] = cpbwt(nrow, c0, p0);
   pb0rev[0] = p0;
-  // PDUMP(0, pb0[0]);
+  PDUMP(0, pb0[0]);
   // PBWTAD_FREE(p0);
 
   for (int j = 1; j < W; j++) {
@@ -1349,6 +1390,8 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
     pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
     pb0rev[j] = pbwtad_new(nrow);
     reversecprev(pb0[j], pb0[j - 1], pb0rev[j], nrow);
+    PDUMP(j, pb0[j]);
+
   }
 
   /* swapping div values with LCP for window computation */
@@ -1409,7 +1452,7 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {
       divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
       FREE(w);
     }
-    PDUMP_SEQ_OFFSET(0, W, pb1, W * j);
+    PDUMP_SEQ_OFFSETR(0, W, pb1, W * j);
     // PDUMP_SEQ(W * j - 1, W * (j + 1) - 1, pb1);
     SWAP(pw0, pw1);
     SWAP(pb0, pb1);
@@ -1500,25 +1543,23 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
   PDUMPR(0, pb[1]);
 
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
   for (size_t j = 1; j < W;) {
     fgetcoli(fin, j, nrow, c0, ncol);
+#elif defined(BF2IOMODE_BCF)
+  size_t j = 1;
+  while (fgetcoli(fin, j, nrow, c0, 1)) {
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
     memcpy(pbprev->a, pb[j]->a, nrow * sizeof(*pb[j]->a));
     memcpy(pbprev->d, pb[j]->d, nrow * sizeof(*pb[j]->d));
 
     cpbwtiLCP(nrow, j, c0, pbprev, pb[j + 1]);
     PDUMPR(j, pb[j + 1]);
-	j++;
+    j++;
   }
 
-#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
-  fclose(fin);
-#elif defined(BF2IOMODE_BCF)
-  bcf_sr_destroy(_sr);
-#else
-#error UNDEFINED BEHAVIOUR
-#endif
-
-  // now each thread can inherit p0 and p0rev as starting pbwt structures
 #pragma omp parallel
   {
 
@@ -1551,8 +1592,8 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     pbwtad *pt0rev = pbwtad_new(nrow);
     pbwtad *pt1 = pbwtad_new(nrow);
     pbwtad *pt1rev = pbwtad_new(nrow);
-      size_t *aux = malloc(nrow * sizeof *aux);
-      uint64_t *pw = malloc(nrow * sizeof *pw);
+    size_t *aux = malloc(nrow * sizeof *aux);
+    uint64_t *pw = malloc(nrow * sizeof *pw);
 
     for (size_t offset = 0; offset < count; offset++) {
       size_t lane = start + offset;
@@ -1588,7 +1629,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #endif
       }
     }
-
+    
     PBWTAD_FREE(pt0);
     PBWTAD_FREE(pt1);
     PBWTAD_FREE(pt0rev);
@@ -1599,7 +1640,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     FREE(pt1rev);
     FREE(aux);
     FREE(pw);
-      }
+  }
   FREE(c0);
   return pb;
   // for (int j = 0; j < W + 1; j++) {
@@ -1683,7 +1724,7 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
 }
 
 int main(int argc, char *argv[]) {
-  char _usage_args_[] = "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr|spr] FILE\n";
+  char _usage_args_[] = "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr|spr] FILE\n"; 
   if (argc < 2) {
     fprintf(stderr, "Usage: %s %s FILE\n", argv[0], _usage_args_);
     return EXIT_FAILURE;
@@ -1761,20 +1802,23 @@ int main(int argc, char *argv[]) {
   if (argc > 3) {
     if (strcmp(argv[3], "DUMP") == 0) {
       DO_DUMP = 1;
+    } else if (strcmp(argv[3], "LAST") == 0) {
+      DO_DUMP_LAST = 1;
+      // def dumplast
     }
   }
   if (strcmp(argv[1], "lin") == 0) {
-    // r = linc(fin, nrow, ncol);
+    // r = linc(fin, nrow, ncol);    
     TRACE(linc(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "bli") == 0) {
     // r = blinc(fin, nrow, ncol);
     TRACE(blinc(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "blis") == 0) {
     // r = sblinc(fd, nrow, ncol);
-    TRACE(sblinc(fd, nrow, ncol), r);
+    TRACE(sblinc(fd, nrow, ncol), r); // BLIS
   } else if (strcmp(argv[1], "blim") == 0) {
     // r = mblinc(fd, nrow, ncol);
-    TRACE(mblinc(fd, nrow, ncol), r);
+    TRACE(mblinc(fd, nrow, ncol), r); // BLIM
   } else if (strcmp(argv[1], "ars") == 0) {
     // r = wapproxc_rrs(fin, nrow, ncol);
     TRACE(wapproxc_rrs(fin, nrow, ncol), r);
@@ -1784,19 +1828,19 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "bars") == 0) {
     // r = swbapproxc_rrs(fd, nrow, ncol);
     TRACE(swbapproxc_rrs(fd, nrow, ncol), r);
-  } else if (strcmp(argv[1], "barm") == 0) {
+  } else if (strcmp(argv[1], "barm") == 0) { // fixed
     // r = mwbapproxc_rrs(fd, nrow, ncol);
     TRACE(mwbapproxc_rrs(fd, nrow, ncol), r);
   } else if (strcmp(argv[1], "prs") == 0) {
     // r = wparc_rrs(fin, nrow, ncol);
     TRACE(wparc_rrs(fin, nrow, ncol), r);
-  } else if (strcmp(argv[1], "bpr") == 0) {
+  } else if (strcmp(argv[1], "bpr") == 0) { // fixed
     // r = bwparc_rrs(fin, nrow, ncol);
     TRACE(bwparc_rrs(fin, nrow, ncol), r);
-  } else if (strcmp(argv[1], "spr") == 0) {
+  } else if (strcmp(argv[1], "spr") == 0) { // broken
     // r = wstagparc_rrs(argv[2], nrow, ncol);
     TRACE(wstagparc_rrs(argv[2], nrow, ncol), r);
-  } else if (strcmp(argv[1], "srs") == 0) {
+  } else if (strcmp(argv[1], "srs") == 0) { // hidle
     // r = wseq_rrs(fin, nrow, ncol);
     TRACE(wseq_rrs(fin, nrow, ncol), r);
   } else {
