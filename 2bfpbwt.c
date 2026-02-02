@@ -1,4 +1,4 @@
-/* vim: set tabstop=2 shiftwidth=2 expandtab: */ 
+/* vim: set ft=c */
 #include "io.h"
 #include "tracing.h"
 #include <assert.h>
@@ -14,27 +14,10 @@
 #endif
 
 #define W 64
-uint8_t DO_DUMP_LAST = 0;
 
 #define DBDUMP
 uint8_t DO_DUMP = 0;
 #ifdef DBDUMP
-#define LASTDUMP(p)                                                            \
-  do {                                                                         \
-    if (DO_DUMP_LAST) {                                                        \
-      printf("last_pbwt: ");                                                   \
-      size_t pdump_j__;                                                        \
-      for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
-        printf("%zu ", (p)->a[pdump_j__]);                                     \
-      printf("%zu", (p)->a[pdump_j__]);                                        \
-      fputc('|', stdout);                                                      \
-      for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
-        printf("%zu ", (p)->d[pdump_j__]);                                     \
-      printf("%zu", (p)->d[pdump_j__]);                                        \
-      fputc(0xA, stdout);                                                      \
-    }                                                                          \
-  } while (0)
-
 #define CDUMP8(i, c)                                                           \
   do {                                                                         \
     if (DO_DUMP) {                                                             \
@@ -844,15 +827,11 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
-    // for (size_t j = 1; j < ncol; j++) {
-    // fgetcoli(fin, j, nrow, c0, ncol);
     cpbwti(nrow, c0, p0, p1);
     PDUMP(j, p1);
     SWAP(p0, p1);
     j++;
   }
-  if (DO_DUMP_LAST)
-    LASTDUMP(p1);
   PBWTAD_FREE(p0);
   PBWTAD_FREE(p1);
   FREE(c0);
@@ -1467,7 +1446,7 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {  //BPR
   for (j = j * W; j < ncol; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
     cpbwtiLCP(nrow, j, c0, pp0, pp1);
-    PDUMP(j, pp1);
+    PDUMPR(j, pp1);
     SWAP(pp0, pp1);
     // pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
     // PDUMP(j, pb[j]);
@@ -1533,7 +1512,6 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #error UNDEFINED BEHAVIOUR
 #endif
 
-  // first column
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   fgetcoli(fin, 0, nrow, c0, ncol);
   memcpy(pbprev->a, pb[0]->a, nrow * sizeof(*pb[0]->a));
@@ -1603,12 +1581,12 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
       reversec(pt0, pt0rev, nrow);
 
 
-      for (size_t j = lane; j + W < ncol; j += W) {
+      for (size_t j = lane; j + W <= ncol; j += W) {
 
 #ifdef BF2IOMODE_BCF
-        lastrowread = fgetcolwgri(fin, j + 1, nrow, pw, lastrowread, W);
+        lastrowread = fgetcolwgri(fin, j+1, nrow, pw, lastrowread, W);
 #else
-        fgetcolwgri(fin, j + 1, nrow, pw, ncol, W);
+        fgetcolwgri(fin, j, nrow, pw, ncol, W);
 #endif
 
         memcpy(pt1->a, pt0->a, nrow * sizeof *(pt0->a));
@@ -1802,9 +1780,6 @@ int main(int argc, char *argv[]) {
   if (argc > 3) {
     if (strcmp(argv[3], "DUMP") == 0) {
       DO_DUMP = 1;
-    } else if (strcmp(argv[3], "LAST") == 0) {
-      DO_DUMP_LAST = 1;
-      // def dumplast
     }
   }
   if (strcmp(argv[1], "lin") == 0) {
