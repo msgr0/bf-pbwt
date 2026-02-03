@@ -3,9 +3,12 @@ CFLAGS?=-O3
 
 VPATH=lib/quadsort
 ALL=gen 2bfpbwt-bm 2bfpbwt-bcf
+LIBOMP?=/opt/homebrew/opt/libomp
+HTSLIB?=/opt/htslib
+
 LIBOMP_INCL=-I ${LIBOMP}/include -L ${LIBOMP}/lib
-#HTSLIB_INCL=-I ${HTSLIB}/include -L ${HTSLIB}/lib
-HTSLIB_INCL=$(pkg-config --cflags htslib)
+HTSLIB_INCL=-I ${HTSLIB}/include -L ${HTSLIB}/lib
+
 APPLE_CLANG:=$(shell $(CC) --version | grep "Apple clang" > /dev/null && echo 1 || echo 0)
 ifeq ($(APPLE_CLANG),1)
     CFLAGS += -Xpreprocessor -fopenmp
@@ -19,12 +22,12 @@ endif
 
 .PHONY: all
 all: ${ALL}
-debug: CFLAGS=-O0 -g
-debug: 2bfpbwt-bm
 
+debug: CFLAGS=-fstrict-aliasing -Wstrict-aliasing -fsanitize=address -O0 -g
+debug: ${ALL}
 
 leaks: CFLAGS=-fstrict-aliasing -Wstrict-aliasing -O0 -g
-leaks: all
+leaks: ${ALL}
 
 %.o: %.c %.h
 	${CC} -c ${CFLAGS} ${CCINCL} $< -o $@
@@ -47,7 +50,7 @@ iobcf.o: iobcf.c
 gen: gen.c
 	${CC} -O3 $^ -o $@
 
-bcf2enc: CCINCL=$(pkg-config --cflags --libs htslib)
+bcf2enc: CCINCL=${HTSLIB_INCL}
 bcf2enc: bcftoenc.c 
 	${CC} -o $@ ${CCINCL} -lhts $^
 
