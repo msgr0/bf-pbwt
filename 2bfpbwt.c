@@ -117,8 +117,10 @@ uint8_t DO_DUMP = 0;
         printf("%zu", (p)[pdump_ix__]->a[pdump_j__]);                          \
         fputc('|', stdout);                                                    \
         for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                 \
-          printf("%zu ",offset + pdump_ix__ +1 - (p)[pdump_ix__]->d[pdump_j__]);               \
-        printf("%zu", offset + pdump_ix__ +1 - (p)[pdump_ix__]->d[pdump_j__]);                  \
+          printf("%zu ",                                                       \
+                 offset + pdump_ix__ + 1 - (p)[pdump_ix__]->d[pdump_j__]);     \
+        printf("%zu",                                                          \
+               offset + pdump_ix__ + 1 - (p)[pdump_ix__]->d[pdump_j__]);       \
         fputc(0xA, stdout);                                                    \
       }                                                                        \
     }                                                                          \
@@ -917,7 +919,7 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
   return NULL;
 }
 
-pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { //ARS
+pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { // ARS
   // Compute the bit-packed windows
   uint64_t *w64 =
       malloc(nrow * sizeof *w64); // window data collected by fgetcoliw64r
@@ -1060,7 +1062,7 @@ pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
   return NULL;
 }
 
-pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) { //BARS
+pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) { // BARS
   // Compute the bit-packed windows
   uint64_t *w64 = malloc(nrow * sizeof *w64);
   // uint64_t *xor = malloc(nrow * sizeof *xor);
@@ -1071,7 +1073,6 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) { //BARS
   pbwtad *pbwtRev = pbwtad_new(nrow);
   pbwtad *pbwtPrRev = pbwtad_new(nrow);
 
-
   sbfgetcolw64rn(fin, nrow, w64, ncol);
   rrsort0(nrow, w64, pbwt->a, aux);
   memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
@@ -1080,7 +1081,7 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) { //BARS
   divc0(nrow, w64, pbwt);
   PDUMPR(W - 1, pbwt);
   PDUMPR(W - 1, pbwtRev);
-  
+
   PDUMPR(W - 1, pbwtPr);
   PDUMPR(W - 1, pbwtPrRev);
 
@@ -1129,7 +1130,7 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) { //BARS
   return NULL;
 }
 
-pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) { //BARM
+pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) { // BARM
   // Compute the bit-packed windows
   uint64_t *pw = malloc(nrow * sizeof *pw);
   size_t *aux = malloc(nrow * sizeof *aux);
@@ -1193,7 +1194,7 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) { //BARM
 /* parallel mixed-windows pbwt
  *
  */
-pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {  //PRS
+pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) { // PRS
   // NOTE: here it is necessary to keep in memory the entire windows
   pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
   pbwtad **pb0rev = malloc(W * sizeof(pbwtad *));
@@ -1289,8 +1290,9 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {  //PRS
       divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
       FREE(w);
     }
-    PDUMP_SEQ_OFFSETR(0, W, pb1, W * j); // FIXME: print here should be rewritten
-                                        // for LCP display as divergence
+    PDUMP_SEQ_OFFSETR(0, W, pb1,
+                      W * j); // FIXME: print here should be rewritten
+                              // for LCP display as divergence
     SWAP(pw0, pw1);
     SWAP(pb0, pb1);
     SWAP(pb0rev, pb1rev);
@@ -1343,7 +1345,7 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) {  //PRS
   FREE(c0);
   return NULL;
 }
-pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {  //BPR
+pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) { // BPR
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
@@ -1370,7 +1372,6 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {  //BPR
     pb0rev[j] = pbwtad_new(nrow);
     reversecprev(pb0[j], pb0[j - 1], pb0rev[j], nrow);
     PDUMP(j, pb0[j]);
-
   }
 
   /* swapping div values with LCP for window computation */
@@ -1464,38 +1465,37 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) {  //BPR
 }
 
 pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
-  #if defined(BF2IOMODE_BCF)
-    ncol = 0;
-    htsFile *fp = hts_open(fpath, "r");
-    if (fp) {
-      // Read the header to advance the file pointer to the data
-      bcf_hdr_t *h = bcf_hdr_read(fp);
-      if (h) {
-        bcf1_t *line = bcf_init();
+#if defined(BF2IOMODE_BCF)
+  ncol = 0;
+  htsFile *fp = hts_open(fpath, "r");
+  if (fp) {
+    // Read the header to advance the file pointer to the data
+    bcf_hdr_t *h = bcf_hdr_read(fp);
+    if (h) {
+      bcf1_t *line = bcf_init();
 
-        // bcf_read is faster than bcf_sr_next_line as it skips
-        // synchronization logic and deep unpacking
-        while (bcf_read(fp, h, line) == 0) {
-          ncol++;
-        }
-
-        bcf_destroy(line);
-        bcf_hdr_destroy(h);
+      // bcf_read is faster than bcf_sr_next_line as it skips
+      // synchronization logic and deep unpacking
+      while (bcf_read(fp, h, line) == 0) {
+        ncol++;
       }
-      hts_close(fp);
+
+      bcf_destroy(line);
+      bcf_hdr_destroy(h);
     }
-  #endif
+    hts_close(fp);
+  }
+#endif
 
   pbwtad **pb = malloc((W + 1) * sizeof(pbwtad *));
   pbwtad *pbprev = pbwtad_new(nrow);
-
 
   for (int j = 0; j < W + 1; j++) {
     pb[j] = pbwtad_new(nrow);
   }
   for (size_t i = 0; i < nrow; i++) {
-  	pb[0]->a[i] = i;
-	  pb[0]->d[i] = 0;
+    pb[0]->a[i] = i;
+    pb[0]->d[i] = 0;
   }
 
 #ifdef BF2IOMODE_BCF
@@ -1551,7 +1551,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #error UNDEFINED BEHAVIOUR
 #endif
 
-size_t tid = omp_get_thread_num();
+    size_t tid = omp_get_thread_num();
     size_t nthreads = omp_get_num_threads();
 
     size_t base = W / nthreads;
@@ -1573,11 +1573,10 @@ size_t tid = omp_get_thread_num();
 
       reversec(pt0, pt0rev, nrow);
 
-
       for (size_t j = lane; j + W <= ncol; j += W) {
 
 #ifdef BF2IOMODE_BCF
-        lastrowread = fgetcolwgri(fin, j+1, nrow, pw, lastrowread, W);
+        lastrowread = fgetcolwgri(fin, j + 1, nrow, pw, lastrowread, W);
 #else
         fgetcolwgri(fin, j, nrow, pw, ncol, W);
 #endif
@@ -1586,7 +1585,6 @@ size_t tid = omp_get_thread_num();
         memcpy(pt1->d, pt0->d, nrow * sizeof *(pt0->d));
         memcpy(pt1rev->a, pt0rev->a, nrow * sizeof *(pt0rev->a));
         memcpy(pt1rev->d, pt0rev->d, nrow * sizeof *(pt0rev->d));
-
 
         rrsortx(nrow, pw, pt0->a, aux);
         reversec(pt0, pt0rev, nrow);
@@ -1600,7 +1598,7 @@ size_t tid = omp_get_thread_num();
 #endif
       }
     }
-    
+
     PBWTAD_FREE(pt0);
     PBWTAD_FREE(pt1);
     PBWTAD_FREE(pt0rev);
@@ -1619,7 +1617,6 @@ size_t tid = omp_get_thread_num();
   //   FREE(pb[j]);
   // }
   // FREE(pb);
-
 }
 
 pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
@@ -1695,7 +1692,7 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
 }
 
 int main(int argc, char *argv[]) {
-  char _usage_args_[] = "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr|spr] FILE\n"; 
+  char _usage_args_[] = "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr|spr] FILE\n";
   if (argc < 2) {
     fprintf(stderr, "Usage: %s %s FILE\n", argv[0], _usage_args_);
     return EXIT_FAILURE;
@@ -1776,7 +1773,7 @@ int main(int argc, char *argv[]) {
     }
   }
   if (strcmp(argv[1], "lin") == 0) {
-    // r = linc(fin, nrow, ncol);    
+    // r = linc(fin, nrow, ncol);
     TRACE(linc(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "bli") == 0) {
     // r = blinc(fin, nrow, ncol);
