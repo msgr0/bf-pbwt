@@ -823,7 +823,7 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
   size_t j = 1;
-  while (fgetcoli(fin, j, nrow, c0, 1)) { //ERROR CHECK: should be j < W ??
+  while (fgetcoli(fin, j, nrow, c0, 1)) {
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
@@ -1521,15 +1521,8 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
   PDUMPR(0, pb[1]);
 
-#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
   for (size_t j = 1; j < W;) {
     fgetcoli(fin, j, nrow, c0, ncol);
-#elif defined(BF2IOMODE_BCF)
-  size_t j = 1;
-  while (j < W && fgetcoli(fin, j, nrow, c0, 1)) {
-#else
-#error UNDEFINED BEHAVIOUR
-#endif
     memcpy(pbprev->a, pb[j]->a, nrow * sizeof(*pb[j]->a));
     memcpy(pbprev->d, pb[j]->d, nrow * sizeof(*pb[j]->d));
 
@@ -1558,7 +1551,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #error UNDEFINED BEHAVIOUR
 #endif
 
-    size_t tid = omp_get_thread_num();
+size_t tid = omp_get_thread_num();
     size_t nthreads = omp_get_num_threads();
 
     size_t base = W / nthreads;
