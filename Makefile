@@ -6,8 +6,14 @@ ALL=gen 2bfpbwt-bm 2bfpbwt-bcf
 LIBOMP?=/opt/homebrew/opt/libomp
 HTSLIB?=/opt/htslib
 
+
 LIBOMP_INCL=-I ${LIBOMP}/include -L ${LIBOMP}/lib
 HTSLIB_INCL=-I ${HTSLIB}/include -L ${HTSLIB}/lib
+
+ifdef IN_NIX_SHELL
+	LIBOMP_INCL=
+	HTSLIB_INCL=$(shell pkg-config --cflags --libs htslib)
+endif
 
 APPLE_CLANG:=$(shell $(CC) --version | grep "Apple clang" > /dev/null && echo 1 || echo 0)
 ifeq ($(APPLE_CLANG),1)
