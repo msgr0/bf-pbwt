@@ -6,8 +6,10 @@
 #include <omp.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #ifdef BF2IOMODE_BCF
 #include "htslib/synced_bcf_reader.h"
@@ -174,6 +176,213 @@ struct pbwtad {
   size_t *d;
 };
 
+typedef struct {
+    size_t *tree;   // The array holding the tree nodes
+    size_t n;       // Original array size
+    size_t size;    // Power of 2 size (capacity)
+} SegTree;
+
+#define BLOCK_SIZE 32
+
+typedef struct {
+    size_t *summary_table; // Sparse Table for the blocks
+    size_t *block_mins;    // Min value of each block
+    size_t *original_data; // Pointer to input data (not owned)
+    size_t n_blocks;       // Number of blocks
+    size_t n;              // Original size
+    size_t *logs;          // Precomputed logs
+    size_t st_cols;        // Width of sparse table
+} LinearRMQ;
+
+// 1. ALLOCATE (Call ONCE at startup)
+LinearRMQ* rmq_alloc(size_t max_n) {
+    LinearRMQ *rmq = malloc(sizeof(LinearRMQ));
+    
+    // Max blocks needed
+    size_t max_blocks = (max_n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    
+    rmq->block_mins = malloc(max_blocks * sizeof(size_t));
+    
+    // Precompute logs for the summary table
+    rmq->logs = malloc((max_blocks + 1) * sizeof(size_t));
+    rmq->logs[1] = 0;
+    for (size_t i = 2; i <= max_blocks; i++)
+        rmq->logs[i] = rmq->logs[i / 2] + 1;
+    
+    // Max log height
+    size_t K = rmq->logs[max_blocks];
+    rmq->st_cols = K + 1;
+    
+    // Sparse table is flattened: [col][row] -> index = col * max_blocks + row
+    // We allocate worst-case size.
+    rmq->summary_table = malloc(rmq->st_cols * max_blocks * sizeof(size_t));
+    
+    return rmq;
+}
+
+// 2. BUILD (Call every column) - O(N)
+void rmq_build(LinearRMQ *rmq, size_t *data, size_t n) {
+    rmq->original_data = data;
+    rmq->n = n;
+    rmq->n_blocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    // A. Compute Block Minimums - Linear Scan O(N)
+    for (size_t b = 0; b < rmq->n_blocks; b++) {
+        size_t start = b * BLOCK_SIZE;
+        size_t end = start + BLOCK_SIZE;
+        if (end > n) end = n;
+        
+        size_t min = SIZE_MAX;
+        for (size_t i = start; i < end; i++) {
+            if (data[i] < min) min = data[i];
+        }
+        rmq->block_mins[b] = min;
+    }
+
+    // B. Build Sparse Table on Block Minimums - O(N/B log(N/B)) -> Very Fast
+    // Fill level 0 (original block mins)
+    for (size_t i = 0; i < rmq->n_blocks; i++) {
+        rmq->summary_table[i] = rmq->block_mins[i]; // row 0
+    }
+
+    size_t K = rmq->logs[rmq->n_blocks];
+    size_t stride = rmq->n_blocks; // stride for accessing next level in flattened array
+
+    for (size_t j = 1; j <= K; j++) {
+        size_t prev_offset = (j - 1) * stride;
+        size_t curr_offset = j * stride;
+        size_t range = 1 << (j - 1);
+        
+        for (size_t i = 0; i + (1 << j) <= rmq->n_blocks; i++) {
+            size_t val1 = rmq->summary_table[prev_offset + i];
+            size_t val2 = rmq->summary_table[prev_offset + i + range];
+            rmq->summary_table[curr_offset + i] = (val1 < val2) ? val1 : val2;
+        }
+    }
+}
+
+// Helper: Standard Sparse Table Query on the blocks
+static inline size_t query_summary(LinearRMQ *rmq, size_t L_block, size_t R_block) {
+    size_t j = rmq->logs[R_block - L_block + 1];
+    size_t stride = rmq->n_blocks;
+    size_t range = 1 << j;
+    
+    size_t val1 = rmq->summary_table[j * stride + L_block];
+    size_t val2 = rmq->summary_table[j * stride + R_block - range + 1];
+    
+    return (val1 < val2) ? val1 : val2;
+}
+
+// 3. QUERY (Call inside recover_div) - O(1) amortized
+size_t rmq_query(LinearRMQ *rmq, size_t L, size_t R) {
+    size_t b_L = L / BLOCK_SIZE;
+    size_t b_R = R / BLOCK_SIZE;
+    size_t min_val = SIZE_MAX;
+
+    if (b_L == b_R) {
+        // Case 1: Range inside single block -> Linear Scan (tiny, max 32 ops)
+        for (size_t i = L; i <= R; i++) {
+            if (rmq->original_data[i] < min_val) min_val = rmq->original_data[i];
+        }
+    } else {
+        // Case 2: Range spans blocks
+        
+        // 1. Scan Suffix of first block
+        size_t end_L = (b_L + 1) * BLOCK_SIZE;
+        for (size_t i = L; i < end_L; i++) {
+            if (rmq->original_data[i] < min_val) min_val = rmq->original_data[i];
+        }
+
+        // 2. Scan Prefix of last block
+        size_t start_R = b_R * BLOCK_SIZE;
+        for (size_t i = start_R; i <= R; i++) {
+            if (rmq->original_data[i] < min_val) min_val = rmq->original_data[i];
+        }
+
+        // 3. Query Summary Table for blocks strictly in between
+        if (b_L + 1 <= b_R - 1) {
+            size_t block_min = query_summary(rmq, b_L + 1, b_R - 1);
+            if (block_min < min_val) min_val = block_min;
+        }
+    }
+    
+    return min_val;
+}
+
+// 4. CLEANUP
+void rmq_free(LinearRMQ *rmq) {
+    free(rmq->summary_table);
+    free(rmq->block_mins);
+    free(rmq->logs);
+    free(rmq);
+}
+
+// 1. ALLOCATE (Call this ONCE at program start)
+SegTree* st_alloc(size_t max_n) {
+    SegTree *st = malloc(sizeof(SegTree));
+    
+    // Calculate next power of 2 >= max_n
+    st->size = 1;
+    while (st->size < max_n) st->size <<= 1;
+    
+    // Allocate 2*size. 
+    // We use calloc to ensure safety, or just malloc since we overwrite.
+    st->tree = malloc(2 * st->size * sizeof(size_t));
+    return st;
+}
+
+void st_build(SegTree *st, size_t *data, size_t n) {
+    st->n = n;
+    
+    // A. Fill the leaves (starting at index 'size')
+    for (size_t i = 0; i < n; i++) {
+        st->tree[st->size + i] = data[i];
+    }
+    // Fill the rest of the padding leaves with MAX value (infinity)
+    for (size_t i = n; i < st->size; i++) {
+        st->tree[st->size + i] = SIZE_MAX;
+    }
+
+    // B. Build internal nodes (working backwards from parents of leaves)
+    for (size_t i = st->size - 1; i > 0; i--) {
+        size_t left_child  = st->tree[2 * i];
+        size_t right_child = st->tree[2 * i + 1];
+        st->tree[i] = (left_child < right_child) ? left_child : right_child;
+    }
+}
+// 3. QUERY (Call this inside 'recover_div')
+// Returns min value in range [L, R] inclusive.
+size_t st_query(SegTree *st, size_t L, size_t R) {
+    size_t min_val = SIZE_MAX;
+    // Shift indices to leaf level
+    L += st->size;
+    R += st->size;
+
+    while (L <= R) {
+        // If L is a right child, it means the parent includes values to the left 
+        // that we DON'T want. So take L and move right.
+        if (L % 2 == 1) {
+            if (st->tree[L] < min_val) min_val = st->tree[L];
+            L++;
+        }
+        
+        // If R is a left child, take R and move left.
+        if (R % 2 == 0) {
+            if (st->tree[R] < min_val) min_val = st->tree[R];
+            R--;
+        }
+        
+        // Move up to parents
+        L /= 2;
+        R /= 2;
+    }
+    return min_val;
+}
+// 4. CLEANUP (Call ONCE at program end)
+void st_free(SegTree *st) {
+    free(st->tree);
+    free(st);
+}
 /*
  * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
  * using externally allocated `aux[n]` auxiliary array.
@@ -330,6 +539,37 @@ void reversecprev(pbwtad *p, pbwtad *pp, pbwtad *rev, size_t n) {
   }
 }
 
+size_t recover_div_st(size_t w, size_t i, size_t i0, 
+                   pbwtad *pprrev, LinearRMQ *st) {
+    
+    // Get ranks in previous sort
+    size_t rank1 = pprrev->a[i];
+    size_t rank2 = pprrev->a[i0];
+
+    // Identify range [L, R]
+    // We want the min strictly BETWEEN these ranks.
+    // Logic: min(rank1, rank2) + 1  TO  max(rank1, rank2)
+    
+    size_t L, R;
+    if (rank1 < rank2) {
+        L = rank1 + 1;
+        R = rank2;
+    } else {
+        L = rank2 + 1;
+        R = rank1;
+    }
+    // L = L + 1; 
+
+    // Safety check (should not trigger if lo// Safety check (should not trigger if logic is correct)
+    if (L > R) return w; // No gap? Identical items
+
+    size_t min_d = rmq_query(st, L, R);
+
+    // If min_d is still SIZE_MAX, it means we queried out of bounds 
+    // or the array wasn't filled. Fallback to w.
+    if (min_d == SIZE_MAX) return w;
+
+    return w + min_d;}
 /*
  * Recover divergence of a match possibly longer than W.
  * Iterates over the range between previous and current row in p->a
@@ -389,6 +629,27 @@ void divc0(size_t n, uint64_t *c, pbwtad *p) {
 //   }
 //   kk += W;
 // }
+//
+
+void divc_st(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
+          pbwtad *pprrev, size_t wi, LinearRMQ *st) {
+  // c contains 64bit-encoded ints
+  // xor of each c[s[i]] and its preceeding;
+  // x[0] contains no information, previous x information is discarded;
+  // here 64 is the size of the window
+  static int8_t kk = 0;
+  uint64_t x = 0;
+  size_t w = wi ? wi : W;
+  size_t div;
+  p->d[0] = 0;
+
+  for (size_t i = 1; i < n; i++) {
+    x = c[p->a[i]] ^ c[p->a[i - 1]];
+    div = x ? __builtin_clzll(x) : w;
+    p->d[i] = (div >= w) ? recover_div_st(w, p->a[i], p->a[i - 1], pprrev, st): div;
+  }
+  kk += W;
+}
 /*
  * Computes the divergence of a generic w64 window;
  * LCP values equal to the window size get recoverd by recover_div function
@@ -918,8 +1179,123 @@ pbwtad **mblinc(int fin, size_t nrow, size_t ncol) {
   FREE(c0);
   return NULL;
 }
+pbwtad **wapproxcst_rrs(void *fin, size_t nrow, size_t ncol) { // ARS
+  LinearRMQ *st = rmq_alloc(nrow); // Allocate ONCE
+
+  // Compute the bit-packed windows
+  uint64_t *w64 =
+      malloc(nrow * sizeof *w64); // window data collected by fgetcoliw64r
+  size_t *aux = malloc(nrow * sizeof *aux);
+
+  pbwtad *pbwt = pbwtad_new(nrow);      // curr pbwt
+  pbwtad *pbwtPr = pbwtad_new(nrow);    // prev pbwt
+  pbwtad *pbwtRev = pbwtad_new(nrow);   // curr pbwt REVERSE
+  pbwtad *pbwtPrRev = pbwtad_new(nrow); // prev pbwt REVERSE
+
+#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_BCF)
+  fgetcoliw64r(fin, 0, nrow, w64, ncol);
+  // CDUMP(0, w64);
+#elif defined(BF2IOMODE_ENC)
+  fgetcoliwg(fin, 0, nrow, w64, ncol, W);
+  // parr(nrow, w64, "%llu,");
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
+
+  rrsort0(nrow, w64, pbwt->a, aux);
+  // WARN: following 2 memcpy(s) dump current pbwtRev (empty??) into pbwtPrRev
+  // probably useless, both arrays should be already initialized.
+  // memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
+  // memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
+  reversec(pbwt, pbwtRev, nrow);
+  divc0(nrow, w64, pbwt);
+
+  PDUMPR(W - 1, pbwt);
+  size_t j;
+  size_t k = 1;
+#if defined(BF2IOMODE_BM)
+  for (j = 1; j * W <= ncol - W;) {
+    // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
+    fgetcoliw64r(fin, j, nrow, w64, ncol);
+
+#elif defined(BF2IOMODE_ENC)
+  for (j = 1; j * W <= ncol - W;) {
+    fgetcoliwg(fin, j, nrow, w64, ncol, W);
+
+#elif defined(BF2IOMODE_BCF)
+  j = 1;
+  ncol = W;
+  size_t _ncol = 0;
+  while ((_ncol = fgetcoliw64r(fin, j, nrow, w64, 0)) == W) {
+    ncol += _ncol;
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
+    memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
+    memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
+    memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
+    memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
+    rmq_build(st, pbwtPr->d, nrow);
+    rrsortx(nrow, w64, pbwt->a,
+            aux); // radix sorting pbwt->a with auxiliary array
+    reversec(pbwt, pbwtRev,
+             nrow); // computing reversec after sorting the new array
+    divc_st(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, W, st);
+    // divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev,
+         // W); // FIXME: check divc comment, pbwtRev could be removed.
+    PDUMPR(W * (j + 1) - 1, pbwt);
+    // CDUMP(W * (j+1) - 1, w64);
+    k++;
+    j++;
+  }
+
+  uint8_t *c0 = NULL;
+
+  // LAST WINDOW
+#if defined(BF2IOMODE_BM)
+  j *= W;
+  fgetcolwgri(fin, j, nrow, w64, ncol, ncol - j);
+#elif defined(BF2IOMODE_ENC)
+  j *= W;
+  fgetcoliwg(fin, j, nrow, w64, ncol, W);
+#elif defined(BF2IOMODE_BCF)
+  // no need to read here as it is already updated in failed condition
+  // of the reading while
+  ncol += _ncol;
+  j *= W;
+#else
+#error UNDEFINED BEHAVIOUR
+#endif
+  // last column needs special handling, since it is < W
+  // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
+  memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
+  memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
+
+  rmq_build(st, pbwtPr->d, nrow);
+  rrsortx(nrow, w64, pbwt->a, aux);
+  memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
+  memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
+  reversec(pbwt, pbwtRev, nrow);
+  // PDUMPR(W * (j + 1) - 1, pbwt);
+  // printf("last w has width:%zu\n", ncol - j);
+  divc_st(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, ncol-j, st);
+  // divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, ncol - j);
+  PDUMPR(ncol - 1, pbwt);
+
+  PBWTAD_FREE(pbwt);
+  // FREE(c0);
+  FREE(pbwt);
+  FREE(pbwtRev);
+  FREE(pbwtPr);
+  FREE(pbwtPrRev);
+  FREE(w64);
+  FREE(aux);
+  free(st);
+  return NULL;
+}
 
 pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { // ARS
+
   // Compute the bit-packed windows
   uint64_t *w64 =
       malloc(nrow * sizeof *w64); // window data collected by fgetcoliw64r
@@ -1006,6 +1382,7 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { // ARS
   // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
   memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
   memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
+
   rrsortx(nrow, w64, pbwt->a, aux);
   memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
   memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
@@ -1784,6 +2161,9 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "blim") == 0) {
     // r = mblinc(fd, nrow, ncol);
     TRACE(mblinc(fd, nrow, ncol), r); // BLIM
+  } else if (strcmp(argv[1], "arst") == 0) {
+    // r = wapproxc_rrs(fin, nrow, ncol);
+    TRACE(wapproxcst_rrs(fin, nrow, ncol), r);
   } else if (strcmp(argv[1], "ars") == 0) {
     // r = wapproxc_rrs(fin, nrow, ncol);
     TRACE(wapproxc_rrs(fin, nrow, ncol), r);

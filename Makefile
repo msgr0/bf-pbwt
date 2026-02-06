@@ -1,5 +1,5 @@
 CC?=cc
-CFLAGS?=-O3
+CFLAGS?=-O3 -march=native
 
 VPATH=lib/quadsort
 ALL=gen 2bfpbwt-bm 2bfpbwt-bcf
