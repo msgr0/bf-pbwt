@@ -18,6 +18,7 @@
       {
         devShells.default = pkgs.mkShell.override {} {
           buildInputs = with pkgs; [
+          bcftools
             clang-tools
             clang
             llvmPackages.openmp

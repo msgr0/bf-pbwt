@@ -282,7 +282,7 @@ int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   bcf_hdr_t *hdr = NULL;
   if (!hdr)
     hdr = sr->readers[0].header;
-  if (nc >= i) {
+  if (nc > i) {
     // bcf_sr_seek does not work, maybe it does not work only without index.
     // either way we cannot use it reliably
     char *fname = strdup(sr->readers[0].fname);
@@ -322,7 +322,7 @@ int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
     }
     free(gt_arr);
   }
-  return i + w - 1;
+  return i + w ;
 }
 
 void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,

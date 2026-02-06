@@ -51,8 +51,8 @@ uint8_t DO_DUMP = 0;
       printf("%zu", (p)->a[pdump_j__]);                                        \
       fputc('|', stdout);                                                      \
       for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
-        printf("%zu ", 1 + (i) - (p)->d[pdump_j__]);                           \
-      printf("%zu", 1 + (i) - (p)->d[pdump_j__]);                              \
+        printf("%zu ", (size_t)(i) + 1 - (p)->d[pdump_j__]);                           \
+      printf("%zu", (size_t)(i) + 1 - (p)->d[pdump_j__]);                              \
       fputc(0xA, stdout);                                                      \
     }                                                                          \
   } while (0)
@@ -1485,6 +1485,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     }
     hts_close(fp);
   }
+  fprintf(stderr,"ncol_read:%zu\n", ncol);
 #endif
 
   pbwtad **pb = malloc((W + 1) * sizeof(pbwtad *));
@@ -1514,21 +1515,18 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   fgetcoli(fin, 0, nrow, c0, ncol);
-  memcpy(pbprev->a, pb[0]->a, nrow * sizeof(*pb[0]->a));
-  memcpy(pbprev->d, pb[0]->d, nrow * sizeof(*pb[0]->d));
+  cpbwti(nrow, c0, pb[0], pb[1]);
+  // PDUMP(0, pb[1]);
 
-  cpbwtiLCP(nrow, 1, c0, pbprev, pb[1]);
-
-  PDUMPR(0, pb[1]);
-
-  for (size_t j = 1; j < W;) {
+  for (size_t j = 1; j < W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
-    memcpy(pbprev->a, pb[j]->a, nrow * sizeof(*pb[j]->a));
-    memcpy(pbprev->d, pb[j]->d, nrow * sizeof(*pb[j]->d));
 
-    cpbwtiLCP(nrow, j, c0, pbprev, pb[j + 1]);
-    PDUMPR(j, pb[j + 1]);
-    j++;
+    cpbwti(nrow, c0, pb[j], pb[j + 1]);
+
+    PDUMP(j, pb[j + 1]);
+  }
+  for (size_t j = 0; j < W ; j++) {
+    swapdiv(pb[j], nrow, j-1);
   }
 
 #pragma omp parallel
@@ -1559,6 +1557,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
     size_t start = tid * base + (tid < rem ? tid : rem);
     size_t count = base + (tid < rem ? 1 : 0);
+    fprintf(stderr, ">>>%zu, %zu, %zu, %zu, %zu, %zu\n\n", tid, nthreads, base, rem, start, count);
     pbwtad *pt0 = pbwtad_new(nrow);
     pbwtad *pt0rev = pbwtad_new(nrow);
     pbwtad *pt1 = pbwtad_new(nrow);
@@ -1568,15 +1567,19 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
     for (size_t offset = 0; offset < count; offset++) {
       size_t lane = start + offset;
+      // initislization of the lane. pt0 should contain the previous iter
+      // value of pbwt. 
       memcpy(pt0->a, pb[lane]->a, nrow * sizeof *(pb[lane]->a));
       memcpy(pt0->d, pb[lane]->d, nrow * sizeof *(pb[lane]->d));
 
+      // swapdiv(pt0, nrow, lane+1);
       reversec(pt0, pt0rev, nrow);
 
       for (size_t j = lane; j + W <= ncol; j += W) {
 
 #ifdef BF2IOMODE_BCF
-        lastrowread = fgetcolwgri(fin, j + 1, nrow, pw, lastrowread, W);
+        lastrowread = fgetcolwgri(fin, j+0, nrow, pw, lastrowread, W);
+
 #else
         fgetcolwgri(fin, j, nrow, pw, ncol, W);
 #endif
@@ -1593,7 +1596,8 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #ifdef DBDUMP
 #pragma omp critical
         {
-          PDUMPR(j + W - 1, pt0);
+          PDUMPR(j + W -1, pt0);
+          // PDUMPR(j+W -1, pt1);
         }
 #endif
       }
@@ -1612,11 +1616,6 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
   }
   FREE(c0);
   return pb;
-  // for (int j = 0; j < W + 1; j++) {
-  //   PBWTAD_FREE(pb[j]);
-  //   FREE(pb[j]);
-  // }
-  // FREE(pb);
 }
 
 pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
