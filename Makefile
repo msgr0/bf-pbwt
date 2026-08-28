@@ -1,5 +1,5 @@
 CC?=cc
-CFLAGS?=-O3
+CFLAGS?=-O3 -DNDEBUG -march=native
 
 ALL=gen sp-pbwt-bm sp-pbwt-bcf
 LIBOMP?=/opt/homebrew/opt/libomp
@@ -7,7 +7,7 @@ HTSLIB?=/opt/htslib
 
 
 LIBOMP_INCL=-I ${LIBOMP}/include -L ${LIBOMP}/lib
-HTSLIB_INCL=-I ${HTSLIB}/include -L ${HTSLIB}/lib
+HTSLIB_INCL=-I ${HTSLIB} -L ${HTSLIB}
 
 ifdef IN_NIX_SHELL
 	LIBOMP_INCL=

@@ -18,3 +18,11 @@ flake.lock
 work/
 nextflow
 .nextflow*
+
+# generated benchmark/correctness fixtures and run artifacts (see bench/run.sh,
+# bench/run_step6.sh) -- large/derived from external panels, not source
+bench/*.bcf
+bench/*.txt
+bench/step6_results.txt
+bench/.pipeline-run/
+extract_bcf_subset

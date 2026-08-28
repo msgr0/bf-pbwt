@@ -21,6 +21,27 @@
 #else
 #define IOBCF_WELLFORMED_CHECK(ptr)
 #endif
+// NOTE on IOBCF_ASSUME_WELLFORMED / IOBCF_WELLFORMED_CHECK:
+// Left disabled (no-op) on purpose. A real per-genotype check is two extra
+// branches (a compare + a shift-and-compare) per allele, i.e. per element of
+// the hottest loop in the whole BCF decode path (called 2 * nsamples times
+// per record). Given this step's goal is CPU-time reduction and the plan's
+// baseline already ran with this disabled (bit-identical correctness was
+// verified against that baseline), enabling it here would both cost cycles
+// and change behavior on malformed input in ways not covered by the
+// correctness matrix. If this is ever re-enabled:
+//   - On the fast native-width path in `bcf_decode_gt_row` below, `ptr` is a
+//     *native-width* value (normally `int8_t`, promoted to `int` by C's
+//     integer promotion rules), NOT the `int32_t` that `bcf_get_genotypes`
+//     would have produced. `bcf_gt_is_missing` still works correctly at any
+//     width (real missing genotype alleles are encoded as raw value 0
+//     regardless of storage width), but the `== bcf_int32_vector_end` check
+//     does NOT — a genuine vector-end pad byte shows up as
+//     `bcf_int8_vector_end` (-127) at this width, not `bcf_int32_vector_end`.
+//     Re-enabling the check on the fast path requires comparing against the
+//     sentinel of the field's *actual* `fmt->type`, not always the int32 one.
+//   - The fallback path (`bcf_get_genotypes`) already produces genuinely
+//     int32-widened values, so the existing check is correct there as-is.
 
 void fgetrc(void *fd, size_t *nr, size_t *nc) {
   // bcf_srs_t *sr = bcf_sr_init();
@@ -39,6 +60,60 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
   // }
   //
   // bcf_sr_destroy(sr);
+}
+
+// Decode one BCF record's GT field into `out[n]` (`n` = 2 * nsamples, one
+// byte per haplotype allele, same values `bcf_gt_allele()` would produce).
+//
+// Fast path: read the raw `bcf_fmt_t` for "GT" and decode `fmt->p` directly
+// in its native on-disk width, skipping the int32 expansion that
+// `bcf_get_genotypes()` (== `bcf_get_format_values(..., BCF_HT_INT)`) always
+// performs regardless of source width. `bcf_get_fmt()` still calls
+// `bcf_unpack(line, BCF_UN_FMT)` internally (unavoidable — any FORMAT field
+// access needs the per-record FMT block decoded), but does not additionally
+// expand every genotype to int32.
+//
+// This fast path is only taken for the common case: biallelic, diploid,
+// BCF_BT_INT8-encoded GT (which is what typical phase3-scale panels with a
+// few thousand samples use). Anything else (multiallelic — more bits needed
+// per genotype means htslib promotes to BCF_BT_INT16/32 — or non-diploid
+// ploidy, fmt->n != 2) falls back to the original `bcf_get_genotypes()` path
+// so those records still decode correctly.
+static inline void bcf_decode_gt_row(bcf_hdr_t *hdr, bcf1_t *line, size_t n,
+                                      uint8_t *restrict out) {
+  bcf_fmt_t *fmt = bcf_get_fmt(hdr, line, "GT");
+  if (fmt && fmt->type == BCF_BT_INT8 && fmt->n == 2) {
+    uint8_t *p = fmt->p;
+    for (size_t i = 0; i < n / 2; i++) {
+      int8_t a0 = (int8_t)p[0];
+      int8_t a1 = (int8_t)p[1];
+      IOBCF_WELLFORMED_CHECK(a0);
+      out[2 * i] = (uint8_t)bcf_gt_allele(a0);
+
+      IOBCF_WELLFORMED_CHECK(a1);
+      out[2 * i + 1] = (uint8_t)bcf_gt_allele(a1);
+
+      p += fmt->size;
+    }
+    return;
+  }
+
+  // Fallback: multiallelic / non-diploid / wider-than-int8 GT encoding.
+  // `gt_arr`/`ngt_arr` persist across calls (thread-local) instead of being
+  // malloc'd and freed per record — see the "hoisted genotype buffer" note
+  // at the top of this file.
+  static __thread int32_t *gt_arr = NULL;
+  static __thread int ngt_arr = 0;
+  bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
+
+  for (size_t i = 0; i < n / 2; i++) {
+    int32_t *ptr = gt_arr + i * 2;
+    IOBCF_WELLFORMED_CHECK(ptr[0]);
+    out[2 * i] = bcf_gt_allele(ptr[0]);
+
+    IOBCF_WELLFORMED_CHECK(ptr[1]);
+    out[2 * i + 1] = bcf_gt_allele(ptr[1]);
+  }
 }
 
 int fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
@@ -62,20 +137,7 @@ int fgetcoli(void *fd, size_t i, size_t n, uint8_t *restrict c, size_t nc) {
     if (!bcf_sr_next_line(sr))
       return 0;
     bcf1_t *line = bcf_sr_get_line(sr, 0);
-    int32_t *gt_arr = NULL, ngt_arr = 0;
-    int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
-
-    for (size_t i = 0; i < n / 2; i++) {
-      int32_t *ptr = gt_arr + i * 2;
-      // hap 1
-      IOBCF_WELLFORMED_CHECK(ptr[0]);
-      c[2 * i] = bcf_gt_allele(ptr[0]);
-
-      // hap 2
-      IOBCF_WELLFORMED_CHECK(ptr[1]);
-      c[2 * i + 1] = bcf_gt_allele(ptr[1]);
-    }
-    free(gt_arr);
+    bcf_decode_gt_row(hdr, line, n, c);
     // bcf_destroy(line);
   } else {
     // WARN: this does not work, at the moment.
@@ -102,24 +164,11 @@ void bfgetcoln(void *fd, size_t n, uint8_t *restrict c, size_t nc) {
     buf = malloc(BFGETCOLI_BUF_SIZE * n * sizeof *buf);
 
   if (bufn == BFGETCOLI_BUF_SIZE) {
-    int x;
     for (size_t r = 0; r < BFGETCOLI_BUF_SIZE; r++) {
       if (!bcf_sr_next_line(sr))
         break;
       bcf1_t *line = bcf_sr_get_line(sr, 0);
-      int32_t *gt_arr = NULL, ngt_arr = 0;
-      int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
-      for (size_t i = 0; i < n / 2; i++) {
-        int32_t *ptr = gt_arr + i * 2;
-        // hap 1
-        IOBCF_WELLFORMED_CHECK(ptr[0]);
-        buf[r * n + 2 * i] = bcf_gt_allele(ptr[0]);
-
-        // hap 2
-        IOBCF_WELLFORMED_CHECK(ptr[1]);
-        buf[r * n + 2 * i + 1] = bcf_gt_allele(ptr[1]);
-      }
-      free(gt_arr);
+      bcf_decode_gt_row(hdr, line, n, buf + r * n);
     }
     bufn = 0;
   }
@@ -136,6 +185,19 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
   fputs("\e[0;33mMode not used for this type of file. Exiting.\e[0m\n", stderr);
   exit(IOBCF_UNUSED_EXITCODE);
 }
+
+// Ensure the per-thread `W x n` staging buffer (one uint8_t allele per
+// (window-row, sample-haplotype) pair) is large enough, growing it lazily.
+// Kept as a macro so each window-reader (compile-time W instantiation, and
+// the two runtime-w variants below) gets its own independently-sized,
+// independently-thread-local staging buffer.
+#define IOBCF_ENSURE_STAGE(stage, stage_cap, need)                            \
+  do {                                                                        \
+    if ((stage_cap) < (need)) {                                               \
+      (stage) = realloc((stage), (need));                                     \
+      (stage_cap) = (need);                                                   \
+    }                                                                         \
+  } while (0)
 
 #define FGETCOLIW_IMPL(W)                                                      \
   void fgetcoliw##W(void *fd, size_t i, size_t n, uint64_t *restrict c,        \
@@ -159,23 +221,30 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
                                                                                \
     static ssize_t _li = -1;                                                   \
     if (i == _li + 1 || !nc) {                                                 \
-      memset(c, 0, n * sizeof *c);                                             \
-      for (size_t wix = 0; wix < W; wix++) {                                   \
+      /* W x n staging buffer: decode into it row-by-row (one contiguous */    \
+      /* write per record), then pack into c[] column-wise so each c[r] */     \
+      /* is written exactly once per window instead of once per          */    \
+      /* (window, wix) pair. */                                                \
+      static __thread uint8_t *stage = NULL;                                   \
+      static __thread size_t stage_cap = 0;                                    \
+      IOBCF_ENSURE_STAGE(stage, stage_cap, (size_t)W * n);                     \
+                                                                               \
+      size_t wix;                                                              \
+      for (wix = 0; wix < W; wix++) {                                          \
         if (!bcf_sr_next_line(sr))                                             \
-          return wix;                                                          \
+          break;                                                               \
         bcf1_t *line = bcf_sr_get_line(sr, 0);                                 \
-        int32_t *gt_arr = NULL, ngt_arr = 0;                                   \
-        int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);             \
-                                                                               \
-        for (size_t i = 0; i < n / 2; i++) {                                   \
-          int32_t *ptr = gt_arr + i * 2;                                       \
-          IOBCF_WELLFORMED_CHECK(ptr[0]);                                      \
-          c[2 * i] |= ((uint64_t)bcf_gt_allele(ptr[0]) << wix);                \
-                                                                               \
-          IOBCF_WELLFORMED_CHECK(ptr[1]);                                      \
-          c[2 * i + 1] |= ((uint64_t)bcf_gt_allele(ptr[1]) << wix);            \
-        }                                                                      \
-        free(gt_arr);                                                          \
+        bcf_decode_gt_row(hdr, line, n, stage + wix * n);                      \
+      }                                                                        \
+      for (size_t r = 0; r < n; r++) {                                         \
+        uint64_t val = 0;                                                      \
+        for (size_t k = 0; k < wix; k++)                                       \
+          val |= (uint64_t)stage[k * n + r] << k;                              \
+        c[r] = val;                                                            \
+      }                                                                        \
+      if (wix < W) {                                                           \
+        _li = i;                                                               \
+        return wix;                                                            \
       }                                                                        \
     } else {                                                                   \
       errno = EPERM;                                                           \
@@ -230,25 +299,29 @@ int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   // _li is not the last index or row, but the last index of window.
   // Current BCF row is (_li * w)
   if (i == _li + 1 || !nc) {
-    memset(c, 0, n * sizeof *c);
-    for (size_t wix = 0; wix < w; wix++) {
+    // See `FGETCOLIW_IMPL`: decode into a `w x n` staging buffer (one
+    // contiguous write per record) then pack column-wise, one write per
+    // c[r], instead of read-modify-writing all of c[] once per record.
+    static __thread uint8_t *stage = NULL;
+    static __thread size_t stage_cap = 0;
+    IOBCF_ENSURE_STAGE(stage, stage_cap, (size_t)w * n);
+
+    size_t wix;
+    for (wix = 0; wix < w; wix++) {
       if (!bcf_sr_next_line(sr))
-        return wix;
+        break;
       bcf1_t *line = bcf_sr_get_line(sr, 0);
-      int32_t *gt_arr = NULL, ngt_arr = 0;
-      int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
-
-      for (size_t i = 0; i < n / 2; i++) {
-        int32_t *ptr = gt_arr + i * 2;
-        // hap 1
-        IOBCF_WELLFORMED_CHECK(ptr[0]);
-        c[2 * i] |= ((uint64_t)bcf_gt_allele(ptr[0]) << wix);
-
-        // hap 2
-        IOBCF_WELLFORMED_CHECK(ptr[1]);
-        c[2 * i + 1] |= ((uint64_t)bcf_gt_allele(ptr[1]) << wix);
-      }
-      free(gt_arr);
+      bcf_decode_gt_row(hdr, line, n, stage + wix * n);
+    }
+    for (size_t r = 0; r < n; r++) {
+      uint64_t val = 0;
+      for (size_t k = 0; k < wix; k++)
+        val |= (uint64_t)stage[k * n + r] << k;
+      c[r] = val;
+    }
+    if (wix < w) {
+      _li = i;
+      return wix;
     }
   } else {
     // WARN: this does not work, at the moment.
@@ -277,6 +350,12 @@ int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
                 uint8_t w) {
 
   // NOTE: NC not used here, can be used as thread-safe _li
+  //
+  // NOTE: this function is called *concurrently* by `stagpar`'s per-lane
+  // threads (one `bcf_srs_t *fd` per lane/thread), so every persistent
+  // buffer used here (the staging buffer below, and `gt_arr`/`ngt_arr`
+  // inside `bcf_decode_gt_row`) MUST be thread-local (`static __thread`),
+  // not plain `static`, or concurrent lanes would race on the same buffer.
 
   bcf_srs_t *sr = fd;
   bcf_hdr_t *hdr = NULL;
@@ -302,27 +381,27 @@ int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
       exit(22);
     }
   }
-  memset(c, 0, n * sizeof *c);
-  for (size_t wix = 0; wix < w; wix++) {
+
+  static __thread uint8_t *stage = NULL;
+  static __thread size_t stage_cap = 0;
+  IOBCF_ENSURE_STAGE(stage, stage_cap, (size_t)w * n);
+
+  size_t wix;
+  for (wix = 0; wix < w; wix++) {
     if (!bcf_sr_next_line(sr))
-      return i + wix;
+      break;
     bcf1_t *line = bcf_sr_get_line(sr, 0);
-    int32_t *gt_arr = NULL, ngt_arr = 0;
-    int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
-
-    for (size_t i = 0; i < n / 2; i++) {
-      int32_t *ptr = gt_arr + i * 2;
-      // hap 1
-      IOBCF_WELLFORMED_CHECK(ptr[0]);
-      c[2 * i] |= ((uint64_t)bcf_gt_allele(ptr[0]) << wix);
-
-      // hap 2
-      IOBCF_WELLFORMED_CHECK(ptr[1]);
-      c[2 * i + 1] |= ((uint64_t)bcf_gt_allele(ptr[1]) << wix);
-    }
-    free(gt_arr);
+    bcf_decode_gt_row(hdr, line, n, stage + wix * n);
   }
-  return i + w ;
+  for (size_t r = 0; r < n; r++) {
+    uint64_t val = 0;
+    for (size_t k = 0; k < wix; k++)
+      val |= (uint64_t)stage[k * n + r] << k;
+    c[r] = val;
+  }
+  if (wix < w)
+    return i + wix;
+  return i + w;
 }
 
 void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
