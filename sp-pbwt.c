@@ -242,6 +242,58 @@ void rrsortx(size_t n, uint64_t *c, pbidx_t *s, pbidx_t *aux) {
 }
 
 /*
+ * Same as rrsortx, but reads the starting permutation from `src` instead of
+ * sorting in place: `src` is left untouched, and the final sorted result
+ * lands in `dst` after all 8 passes (never in `src` or `aux`). Lets a caller
+ * double-buffer by pointer-swapping whole pbwtad structs across windows
+ * instead of memcpy-ing a snapshot of the previous window's `a` array before
+ * every sort.
+ */
+void rrsortx_src(size_t n, uint64_t *c, pbidx_t *src, pbidx_t *dst,
+                 pbidx_t *aux) {
+  pbidx_t *tmp;
+  pbidx_t *pre = src;
+  pbidx_t *post = aux;
+  uint8_t b;
+
+  size_t cnt[8][256] = {0};
+  for (size_t j = 0; j < n; j++) {
+    uint64_t val = c[j];
+    cnt[0][(val) & 0xFFULL]++;
+    cnt[1][(val >> 8) & 0xFFULL]++;
+    cnt[2][(val >> 16) & 0xFFULL]++;
+    cnt[3][(val >> 24) & 0xFFULL]++;
+    cnt[4][(val >> 32) & 0xFFULL]++;
+    cnt[5][(val >> 40) & 0xFFULL]++;
+    cnt[6][(val >> 48) & 0xFFULL]++;
+    cnt[7][(val >> 56) & 0xFFULL]++;
+  }
+
+  for (size_t i = 0; i < 8; i++) {
+    // prefix sum
+    for (size_t j = 1; j < 256; j++)
+      cnt[i][j] += cnt[i][j - 1];
+    // sorting
+    for (ssize_t j = n - 1; j >= 0; --j) {
+      b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
+      cnt[i][b]--;
+      post[cnt[i][b]] = pre[j];
+    }
+    if (i == 0) {
+      // pass 0 read from `src` (never written); from here on ping-pong
+      // between `aux` and `dst` only, so `src` stays intact.
+      pre = aux;
+      post = dst;
+    } else {
+      // swap pre and post
+      tmp = pre;
+      pre = post;
+      post = tmp;
+    }
+  }
+}
+
+/*
  * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
  * without using externally allocated `aux[n]` auxiliary array.
  * This version assumes the `s` array to be already initialized.
@@ -452,15 +504,19 @@ void swapdiv(pbwtad *p, size_t n, size_t k) {
   }
 }
 
-static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
-  static pbidx_t *o = NULL;
-  static pbidx_t *h = NULL;
-  static pbidx_t k = 1;
+/* Number of zeros in c[0..n-1].  Since the prefix array is a permutation of
+ * 0..n-1, this equals the number of loop iterations below whose mask is 0,
+ * i.e. the final value of `r` in the old two-staging-array formulation.
+ * Sequential byte pass, auto-vectorizes. */
+static inline size_t count_zeros(size_t n, const uint8_t *restrict c) {
+  size_t n0 = 0;
+  for (size_t t = 0; t < n; t++)
+    n0 += (c[t] == 0);
+  return n0;
+}
 
-  if (!o)
-    o = malloc(n * sizeof *o);
-  if (!h)
-    h = malloc(n * sizeof *h);
+static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
+  static pbidx_t k = 1;
 
   pbwtad *ret = malloc(sizeof *ret);
   // single 2*n block, `a` as base — see pbwtad_new/PBWTAD_FREE.
@@ -468,7 +524,8 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   ret->a = block;
   ret->d = block + n;
 
-  size_t r = 0, q = 0;
+  // zeros land at 0.., ones directly at n0.. — no staging, no trailing memcpy
+  size_t r = 0, q = count_zeros(n, c);
   pbidx_t f = k, g = k;
 
   size_t i;
@@ -480,19 +537,16 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
     g = (ddx > g) ? ddx : g;
 
     size_t mask = c[idx];
-    o[q] = idx;
-    ret->a[r] = idx;
-    h[q] = g;
-    ret->d[r] = f;
+    size_t pos = mask ? q : r; // cmov
+    pbidx_t dv = mask ? g : f; // cmov
+    ret->a[pos] = idx;
+    ret->d[pos] = dv;
 
     f &= -mask;       // f = 0 if mask == 0, unchanged if mask == 1
     g &= -(1 - mask); // g = 0 if mask == 1, unchanged if mask == 0
     q += mask;        // Increment q if mask is 1
     r += mask ^ 1;    // Increment r if mask is 0
   }
-
-  memcpy(ret->a + r, o, q * sizeof *o);
-  memcpy(ret->d + r, h, q * sizeof *h);
 
   k++;
   pbidx_guard(k);
@@ -505,18 +559,11 @@ static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
  */
 static int cpbwtiLCP(size_t n, size_t k, uint8_t *restrict c,
                      pbwtad *restrict pp, pbwtad *restrict pc) {
-  static pbidx_t *o = NULL;
-  static pbidx_t *h = NULL;
-
   pbidx_guard(k);
   swapdiv(pp, n, k - 1);
-  size_t nrow = n;
-  if (!o)
-    o = malloc(n * sizeof *o);
-  if (!h)
-    h = malloc(n * sizeof *h);
 
-  size_t r = 0, q = 0;
+  // zeros land at 0.., ones directly at n0.. — no staging, no trailing memcpy
+  size_t r = 0, q = count_zeros(n, c);
   pbidx_t f = (pbidx_t)k + 1, g = (pbidx_t)k + 1;
 
   size_t i;
@@ -528,10 +575,10 @@ static int cpbwtiLCP(size_t n, size_t k, uint8_t *restrict c,
     g = (ddx > g) ? ddx : g;
 
     size_t mask = c[idx];
-    o[q] = idx;
-    pc->a[r] = idx;
-    h[q] = g;
-    pc->d[r] = f;
+    size_t pos = mask ? q : r; // cmov
+    pbidx_t dv = mask ? g : f; // cmov
+    pc->a[pos] = idx;
+    pc->d[pos] = dv;
 
     f &= -mask;       // f = 0 if mask == 0, unchanged if mask == 1
     g &= -(1 - mask); // g = 0 if mask == 1, unchanged if mask == 0
@@ -539,25 +586,16 @@ static int cpbwtiLCP(size_t n, size_t k, uint8_t *restrict c,
     r += mask ^ 1;    // Increment r if mask is 0
   }
 
-  memcpy(pc->a + r, o, q * sizeof *o);
-  memcpy(pc->d + r, h, q * sizeof *h);
-
   swapdiv(pc, n, k);
   return 1;
 }
 
 static int cpbwti(size_t n, uint8_t *restrict c, pbwtad *restrict pp,
                   pbwtad *restrict pc) {
-  static pbidx_t *o = NULL;
-  static pbidx_t *h = NULL;
   static pbidx_t k = 1;
 
-  if (!o)
-    o = malloc(n * sizeof *o);
-  if (!h)
-    h = malloc(n * sizeof *h);
-
-  size_t r = 0, q = 0;
+  // zeros land at 0.., ones directly at n0.. — no staging, no trailing memcpy
+  size_t r = 0, q = count_zeros(n, c);
   pbidx_t f = k, g = k;
 
   size_t i;
@@ -569,19 +607,16 @@ static int cpbwti(size_t n, uint8_t *restrict c, pbwtad *restrict pp,
     g = (ddx > g) ? ddx : g;
 
     size_t mask = c[idx];
-    o[q] = idx;
-    pc->a[r] = idx;
-    h[q] = g;
-    pc->d[r] = f;
+    size_t pos = mask ? q : r; // cmov
+    pbidx_t dv = mask ? g : f; // cmov
+    pc->a[pos] = idx;
+    pc->d[pos] = dv;
 
     f &= -mask;       // f = 0 if mask == 0, unchanged if mask == 1
     g &= -(1 - mask); // g = 0 if mask == 1, unchanged if mask == 0
     q += mask;        // Increment q if mask is 1
     r += mask ^ 1;    // Increment r if mask is 0
   }
-
-  memcpy(pc->a + r, o, q * sizeof *o);
-  memcpy(pc->d + r, h, q * sizeof *h);
 
   k++;
   pbidx_guard(k);
@@ -747,12 +782,17 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { // ARS
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
-    memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
-    memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
-    memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
-    memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
-    rrsortx(nrow, w64, pbwt->a,
-            aux); // radix sorting pbwt->a with auxiliary array
+    // Double-buffer instead of memcpy-snapshotting: pbwtPr->a and
+    // pbwtPrRev->d are never read (divc only reads ppr->d and pprrev->a, see
+    // divc/recover_div), so those two directions need no data at all, live
+    // or otherwise. For the two that are read, swapping the whole pbwtad*
+    // (never individual a/d — they share one allocation, see pbwtad_new)
+    // makes last iteration's already-computed values show up as "prev" for
+    // free, instead of copying them.
+    SWAP(pbwt, pbwtPr);
+    SWAP(pbwtRev, pbwtPrRev);
+    rrsortx_src(nrow, w64, pbwtPr->a, pbwt->a,
+                aux); // sort pbwtPr's (prev window's) permutation into pbwt->a
     reversec(pbwt, pbwtRev,
              nrow); // computing reversec after sorting the new array
     divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, W);
@@ -779,11 +819,9 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { // ARS
 #error UNDEFINED BEHAVIOUR
 #endif
   // last column needs special handling, since it is < W
-  memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
-  memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
-  rrsortx(nrow, w64, pbwt->a, aux);
-  memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
-  memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
+  SWAP(pbwt, pbwtPr);
+  SWAP(pbwtRev, pbwtPrRev);
+  rrsortx_src(nrow, w64, pbwtPr->a, pbwt->a, aux);
   reversec(pbwt, pbwtRev, nrow);
   divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, ncol - j);
   PDUMPR(ncol - 1, pbwt);

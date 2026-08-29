@@ -68,10 +68,15 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
 // Fast path: read the raw `bcf_fmt_t` for "GT" and decode `fmt->p` directly
 // in its native on-disk width, skipping the int32 expansion that
 // `bcf_get_genotypes()` (== `bcf_get_format_values(..., BCF_HT_INT)`) always
-// performs regardless of source width. `bcf_get_fmt()` still calls
+// performs regardless of source width. `bcf_get_fmt_id()` calls
 // `bcf_unpack(line, BCF_UN_FMT)` internally (unavoidable — any FORMAT field
 // access needs the per-record FMT block decoded), but does not additionally
 // expand every genotype to int32.
+//
+// The GT format tag id is cached across calls (thread-local) to avoid the
+// per-call khash string lookup overhead of bcf_get_fmt(). The cache is
+// invalidated if the header pointer changes (which happens when fgetcolwgri
+// re-opens a BCF file).
 //
 // This fast path is only taken for the common case: biallelic, diploid,
 // BCF_BT_INT8-encoded GT (which is what typical phase3-scale panels with a
@@ -81,7 +86,18 @@ void fgetrc(void *fd, size_t *nr, size_t *nc) {
 // so those records still decode correctly.
 static inline void bcf_decode_gt_row(bcf_hdr_t *hdr, bcf1_t *line, size_t n,
                                       uint8_t *restrict out) {
-  bcf_fmt_t *fmt = bcf_get_fmt(hdr, line, "GT");
+  // Cached GT format tag id; invalidated if header pointer changes.
+  // Thread-local because fgetcolwgri calls this concurrently from stagpar lanes.
+  static __thread int gt_fmt_id = -1;
+  static __thread const bcf_hdr_t *gt_hdr_cache = NULL;
+
+  // Recompute the GT format id if the header changed (e.g., file re-open in fgetcolwgri).
+  if (hdr != gt_hdr_cache) {
+    gt_fmt_id = bcf_hdr_id2int(hdr, BCF_DT_ID, "GT");
+    gt_hdr_cache = hdr;
+  }
+
+  bcf_fmt_t *fmt = bcf_get_fmt_id(line, gt_fmt_id);
   if (fmt && fmt->type == BCF_BT_INT8 && fmt->n == 2) {
     uint8_t *p = fmt->p;
     for (size_t i = 0; i < n / 2; i++) {
@@ -199,6 +215,161 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
     }                                                                         \
   } while (0)
 
+// ---------------------------------------------------------------------------
+// Window packing: byte rows -> bit-packed columns.
+//
+// All window readers below produce, for each haplotype row `r`, a word
+// `c[r]` whose bit `k` is the allele of BCF record `k` of the window (LSB =
+// first record read). The obvious way to build that is the scalar loop
+//
+//   for r in 0..n:  for k in 0..wix:  c[r] |= stage[k*n + r] << k
+//
+// which strides the `w x n` staging buffer by `n` and costs ~64n operations
+// per window. Profiling (perf annotate, chr21, `sampled`) put ~14.5% of total
+// runtime on exactly those four instructions.
+//
+// It is replaced by the classic two-stage transpose:
+//   1. right after each record is decoded (while its 5 KB byte row is still
+//      hot in L1) compress it to a bitmap row of ceil(n/64) words, one bit
+//      per haplotype -- 32 bytes -> 32 bits in ~4 AVX2 instructions, with a
+//      portable scalar fallback;
+//   2. once the window is complete, zero the unused rows and transpose the
+//      resulting 64 x n bit matrix in 64x64 blocks with the Hacker's Delight
+//      bit transpose (6 shift/mask/xor rounds), ~11 ops per output word
+//      instead of 64.
+//
+// FIDELITY NOTE: the old loop OR-ed the *whole allele byte* shifted left by
+// k, so an allele value > 1 (multiallelic record) would bleed into higher
+// bits. A bitmap cannot reproduce that. `iobcf_pack_bitrow` therefore reports
+// whether it saw any byte outside {0,1}; if so the caller falls back to the
+// original scalar loop over the staging buffer, keeping output bit-identical
+// on every input, not just biallelic ones. (Missing genotypes decode to
+// 0xff via bcf_gt_allele(0) == -1 and are caught by the same check.)
+
+#include <stdint.h>
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
+
+// Compress one decoded byte row (`n` allele bytes) into `dst[0..ceil(n/64))`,
+// bit j of word j/64 set iff row[j] != 0. Bits past `n` in the tail word are
+// zeroed. Returns nonzero iff any byte was outside {0,1} (see FIDELITY NOTE).
+static inline int iobcf_pack_bitrow(const uint8_t *restrict row, size_t n,
+                                    uint64_t *restrict dst) {
+  size_t nw = (n + 63) >> 6;
+  int bad = 0;
+  for (size_t wj = 0; wj < nw; wj++) {
+    size_t base = wj << 6;
+    size_t lim = (n - base) < 64 ? (n - base) : 64;
+    uint64_t v = 0;
+    size_t k = 0;
+#if defined(__AVX2__)
+    const __m256i zero = _mm256_setzero_si256();
+    const __m256i one = _mm256_set1_epi8(1);
+    for (; k + 32 <= lim; k += 32) {
+      __m256i x = _mm256_loadu_si256((const __m256i *)(row + base + k));
+      /* bit set where byte != 0 */
+      uint32_t zm = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(x, zero));
+      /* saturating x-1 == 0 exactly for unsigned bytes <= 1 */
+      uint32_t gm = (uint32_t)_mm256_movemask_epi8(
+          _mm256_cmpeq_epi8(_mm256_subs_epu8(x, one), zero));
+      v |= (uint64_t)(uint32_t)(~zm) << k;
+      bad |= (gm != 0xffffffffu);
+    }
+#endif
+    for (; k < lim; k++) {
+      uint8_t b = row[base + k];
+      bad |= (b > 1);
+      v |= (uint64_t)(b != 0) << k;
+    }
+    dst[wj] = v;
+  }
+  return bad;
+}
+
+// In-place 64x64 bit-matrix transpose (Hacker's Delight, fig. 7-6 scaled to
+// 64 bits): on exit bit k of A[j] is bit j of the original A[k].
+static inline void iobcf_transpose64(uint64_t A[64]) {
+  uint64_t m = 0x00000000ffffffffull;
+  for (int j = 32; j != 0; j >>= 1, m ^= m << j) {
+    for (int k = 0; k < 64; k = ((k | j) + 1) & ~j) {
+      uint64_t t = ((A[k] >> j) ^ A[k + j]) & m;
+      A[k + j] ^= t;
+      A[k] ^= (t << j);
+    }
+  }
+}
+
+// Transpose the `w x n` bitmap in `bits` (row-major, `nw` words per row;
+// rows >= w are treated as zero) into `c[0..n)`, bit k of c[r] = bit r of
+// bitmap row k.
+static void iobcf_transpose_window(const uint64_t *restrict bits, size_t nw,
+                                   size_t n, size_t w, uint64_t *restrict c) {
+  for (size_t wj = 0; wj < nw; wj++) {
+    uint64_t A[64];
+    for (size_t k = 0; k < 64; k++)
+      A[k] = (k < w) ? bits[k * nw + wj] : 0;
+    iobcf_transpose64(A);
+    size_t base = wj << 6;
+    size_t lim = (n - base) < 64 ? (n - base) : 64;
+    for (size_t j = 0; j < lim; j++)
+      c[base + j] = A[j];
+  }
+}
+
+// Original scalar packing, kept as the exact-fidelity fallback.
+static void iobcf_pack_scalar(const uint8_t *restrict stage, size_t n,
+                              size_t wix, uint64_t *restrict c) {
+  for (size_t r = 0; r < n; r++) {
+    uint64_t val = 0;
+    for (size_t k = 0; k < wix; k++)
+      val |= (uint64_t)stage[k * n + r] << k;
+    c[r] = val;
+  }
+}
+
+// Read up to `w` (<= 64) consecutive records from `sr` and write them into
+// `c[0..n)` bit-packed as described above. Returns the number of records
+// actually read (< w only at end of file).
+//
+// NOTE: every buffer kept across calls here is `static __thread`, because
+// `fgetcolwgri` (and hence this helper) is called concurrently by `stagpar`'s
+// per-lane threads, each with its own `bcf_srs_t *`.
+static size_t iobcf_read_window(bcf_srs_t *sr, bcf_hdr_t *hdr, size_t n,
+                                size_t w, uint64_t *restrict c) {
+  static __thread uint8_t *stage = NULL;
+  static __thread size_t stage_cap = 0;
+  static __thread uint64_t *bits = NULL;
+  static __thread size_t bits_cap = 0;
+
+  size_t nw = (n + 63) >> 6;
+  IOBCF_ENSURE_STAGE(stage, stage_cap, w * n);
+  size_t need = 64 * nw * sizeof(uint64_t);
+  if (bits_cap < need) {
+    bits = realloc(bits, need);
+    bits_cap = need;
+  }
+
+  int bad = (w > 64);
+  size_t wix;
+  for (wix = 0; wix < w; wix++) {
+    if (!bcf_sr_next_line(sr))
+      break;
+    bcf1_t *line = bcf_sr_get_line(sr, 0);
+    uint8_t *row = stage + wix * n;
+    bcf_decode_gt_row(hdr, line, n, row);
+    if (!bad)
+      bad |= iobcf_pack_bitrow(row, n, bits + wix * nw);
+  }
+
+  if (bad) {
+    iobcf_pack_scalar(stage, n, wix, c);
+    return wix;
+  }
+  iobcf_transpose_window(bits, nw, n, wix, c);
+  return wix;
+}
+
 #define FGETCOLIW_IMPL(W)                                                      \
   void fgetcoliw##W(void *fd, size_t i, size_t n, uint64_t *restrict c,        \
                     size_t nc) {                                               \
@@ -221,27 +392,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
                                                                                \
     static ssize_t _li = -1;                                                   \
     if (i == _li + 1 || !nc) {                                                 \
-      /* W x n staging buffer: decode into it row-by-row (one contiguous */    \
-      /* write per record), then pack into c[] column-wise so each c[r] */     \
-      /* is written exactly once per window instead of once per          */    \
-      /* (window, wix) pair. */                                                \
-      static __thread uint8_t *stage = NULL;                                   \
-      static __thread size_t stage_cap = 0;                                    \
-      IOBCF_ENSURE_STAGE(stage, stage_cap, (size_t)W * n);                     \
-                                                                               \
-      size_t wix;                                                              \
-      for (wix = 0; wix < W; wix++) {                                          \
-        if (!bcf_sr_next_line(sr))                                             \
-          break;                                                               \
-        bcf1_t *line = bcf_sr_get_line(sr, 0);                                 \
-        bcf_decode_gt_row(hdr, line, n, stage + wix * n);                      \
-      }                                                                        \
-      for (size_t r = 0; r < n; r++) {                                         \
-        uint64_t val = 0;                                                      \
-        for (size_t k = 0; k < wix; k++)                                       \
-          val |= (uint64_t)stage[k * n + r] << k;                              \
-        c[r] = val;                                                            \
-      }                                                                        \
+      size_t wix = iobcf_read_window(sr, hdr, n, (size_t)W, c);                \
       if (wix < W) {                                                           \
         _li = i;                                                               \
         return wix;                                                            \
@@ -299,26 +450,7 @@ int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   // _li is not the last index or row, but the last index of window.
   // Current BCF row is (_li * w)
   if (i == _li + 1 || !nc) {
-    // See `FGETCOLIW_IMPL`: decode into a `w x n` staging buffer (one
-    // contiguous write per record) then pack column-wise, one write per
-    // c[r], instead of read-modify-writing all of c[] once per record.
-    static __thread uint8_t *stage = NULL;
-    static __thread size_t stage_cap = 0;
-    IOBCF_ENSURE_STAGE(stage, stage_cap, (size_t)w * n);
-
-    size_t wix;
-    for (wix = 0; wix < w; wix++) {
-      if (!bcf_sr_next_line(sr))
-        break;
-      bcf1_t *line = bcf_sr_get_line(sr, 0);
-      bcf_decode_gt_row(hdr, line, n, stage + wix * n);
-    }
-    for (size_t r = 0; r < n; r++) {
-      uint64_t val = 0;
-      for (size_t k = 0; k < wix; k++)
-        val |= (uint64_t)stage[k * n + r] << k;
-      c[r] = val;
-    }
+    size_t wix = iobcf_read_window(sr, hdr, n, (size_t)w, c);
     if (wix < w) {
       _li = i;
       return wix;
@@ -382,23 +514,7 @@ int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
     }
   }
 
-  static __thread uint8_t *stage = NULL;
-  static __thread size_t stage_cap = 0;
-  IOBCF_ENSURE_STAGE(stage, stage_cap, (size_t)w * n);
-
-  size_t wix;
-  for (wix = 0; wix < w; wix++) {
-    if (!bcf_sr_next_line(sr))
-      break;
-    bcf1_t *line = bcf_sr_get_line(sr, 0);
-    bcf_decode_gt_row(hdr, line, n, stage + wix * n);
-  }
-  for (size_t r = 0; r < n; r++) {
-    uint64_t val = 0;
-    for (size_t k = 0; k < wix; k++)
-      val |= (uint64_t)stage[k * n + r] << k;
-    c[r] = val;
-  }
+  size_t wix = iobcf_read_window(sr, hdr, n, (size_t)w, c);
   if (wix < w)
     return i + wix;
   return i + w;

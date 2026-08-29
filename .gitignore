@@ -25,4 +25,9 @@ bench/*.bcf
 bench/*.txt
 bench/step6_results.txt
 bench/.pipeline-run/
+bench/.pipeline-run-*/
+bench/.pipeline-step*/
+bench/ref/
+bench/*.data
+bench/*.stderr
 extract_bcf_subset
